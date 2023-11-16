@@ -52,7 +52,7 @@ assert all(-(model.num_layers + 1) <= i <= model.num_layers for i in REPR_LAYERS
 repr_layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in REPR_LAYERS]
 
 # Initializing lists to store mean representations and sequence labels
-mean_representations = []
+bos_representations = []
 seq_labels = []
 
 # Processing each batch without computing gradients (to save memory and computation)
@@ -76,15 +76,15 @@ with torch.no_grad():
         # Mean pooling representations for each sequence, excluding the beginning-of-sequence (bos) token
         for i, label in enumerate(labels):
             seq_labels.append(label)
-            mean_representation = [t[i, 1 : len(strs[i]) + 1].mean(0).clone()
-                    for layer, t in representations.items()]
+            bos_representation = [t[i, 0].clone() 
+                                  for layer, t in representations.items()]
             # We take mean_representation[0] to keep the [array] instead of [[array]].
-            mean_representations.append(mean_representation[0])
+            bos_representations.append(bos_representation[0])
             
 # Stacking all mean representations into a single tensor
-mean_representations = torch.vstack(mean_representations)
+bos_representations = torch.vstack(bos_representations)
 # Sorting the representations based on sequence labels
 ordering = np.argsort([int(i) for i in seq_labels])
-mean_representations = mean_representations[ordering, :]
+bos_representations = bos_representations[ordering, :]
 # Saving the tensor to the specified output file
-torch.save(mean_representations, output_file)
+torch.save(bos_representations, output_file)
