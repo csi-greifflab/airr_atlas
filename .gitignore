@@ -1,6 +1,7 @@
 # Datasets
 data/*
 *.csv
+*test.fa*
 
 # Other tools
 SaProt
@@ -170,3 +171,4 @@ cython_debug/
 =======
 .Rhistory
 >>>>>>> Stashed changes
+separate_trastuzumab.ipynb
