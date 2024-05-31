@@ -1,6 +1,11 @@
 # Datasets
 data/*
+*.csv
+*test.fa*
 
+# Other tools
+SaProt
+models
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -167,5 +172,5 @@ cython_debug/
 *.Rproj
 .Rproj.user
 renv/
-
+separate_trastuzumab.ipynb
 
