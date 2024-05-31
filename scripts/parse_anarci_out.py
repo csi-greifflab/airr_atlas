@@ -59,6 +59,14 @@ dfs.extend(results)
 # Merge all dataframes into a single dataframe
 merged_df = pd.concat(dfs, ignore_index=True)
 
+# Rename 'Id' column to 'id'
+merged_df.rename(columns={'Id': 'id'}, inplace=True)
+
+# Sort df by 'id' column
+merged_df.sort_values(by='id', inplace = True)
+
+
+
 # Create the output directory if it doesn't exist
 output_filepath = os.path.join(args.output_dir, f'{args.datasetname}_cdr3.csv')
 os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
