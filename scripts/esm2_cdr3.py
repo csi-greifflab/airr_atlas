@@ -16,11 +16,17 @@ import pandas as pd
 
 # Parsing command-line arguments for input and output file paths
 parser = argparse.ArgumentParser(description="Input path")
-parser.add_argument("fasta_path", type=str, help="Fasta path + filename.fa")
-parser.add_argument("output_path", type=str, help="Output path + filename.pt")
-parser.add_argument("--cdr3_path", default = None, type=str, help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
-parser.add_argument("--context", default = 0,type=int, help="Number of amino acids to include before and after CDR3 sequence")
-parser.add_argument("--layers", default = [-1],type=int, help="Representation layers to extract from the model. Default is the last layer.")
+parser.add_argument("fasta_path", type=str,
+                    help="Fasta path + filename.fa")
+parser.add_argument("output_path", type=str,
+                    help="Output path + filename.pt")
+parser.add_argument("--cdr3_path", default = None, type=str,
+                    help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
+parser.add_argument("--context", default = 0,type=int,
+                    help="Number of amino acids to include before and after CDR3 sequence")
+parser.add_argument("--layers", type=int, nargs='*', default=[-1],
+                    help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
+
 args = parser.parse_args()
 
 # Storing the input and output file paths
