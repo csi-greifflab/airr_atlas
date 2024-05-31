@@ -11,20 +11,20 @@ from esm import FastaBatchedDataset, pretrained
 import argparse
 import numpy as np
 from Bio import SeqIO
-import pandas as pd
+import csv
 
 
 # Parsing command-line arguments for input and output file paths
 parser = argparse.ArgumentParser(description="Input path")
-parser.add_argument("fasta_path", type=str,
+parser.add_argument("--fasta_path", type=str, required=True,
                     help="Fasta path + filename.fa")
-parser.add_argument("output_path", type=str,
-                    help="Output path + filename.pt")
+parser.add_argument("--output_path", type=str, required=True,
+                    help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'.")
 parser.add_argument("--cdr3_path", default = None, type=str,
                     help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
 parser.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
-parser.add_argument("--layers", type=int, nargs='*', default=[-1],
+parser.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
 
 args = parser.parse_args()
@@ -34,28 +34,37 @@ fasta_file = args.fasta_path
 output_file = args.output_path
 cdr3_path = args.cdr3_path
 context = args.context
-layers = args.layers
+layers = list(map(int, args.layers[0].split()))
 
 #debug values
 #fasta_file = '/doctorai/userdata/airr_atlas/data/sequences/first_10.fasta'
+#fasta_file = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains.fa'
 #output_file = '/doctorai/userdata/airr_atlas/test_cdr3.pt'
 #cdr3_path = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains/wang_H_full_chains_cdr3.csv'
 #context = 0
 
+# Load cdr3 sequences and store in dictionary
+with open(cdr3_path) as f:
+    reader = csv.reader(f)
+    cdr3_dict = {rows[0]:rows[1] for rows in reader}
 
-cdr3_df = pd.read_csv(cdr3_path)
+# convert fasta into dictionary
+def fasta_to_dict(fasta_file):
+    print('Loading and batching input sequences...')
+    seq_dict = {}
+    with open(fasta_file) as f:
+        for record in SeqIO.parse(f, 'fasta'):
+            seq_dict[record.id] = str(record.seq)
+            # print progress
+            if len(seq_dict) % 1000 == 0:
+                print(f'{len(seq_dict)} sequences loaded')
+    return seq_dict            
 
 
-#convert fasta into pandas dataframe
-def fasta_to_df(fasta_file):
-    fasta_sequences = SeqIO.parse(open(fasta_file),'fasta')
-    df = pd.DataFrame(columns=['id', 'sequence'])
-    for fasta in fasta_sequences:
-        name, sequence = fasta.id, str(fasta.seq)
-        df = pd.concat([df, pd.DataFrame({'id': [name], 'sequence': [sequence]})], ignore_index=True)
-    return df
+fasta_sequences = fasta_to_dict(fasta_file)
 
-fasta_sequences = fasta_to_df(fasta_file)
+# TODO investigate missing_keys
+missing_keys = [key for key in fasta_sequences.keys() if key not in cdr3_dict.keys()]
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
@@ -63,6 +72,7 @@ TOKS_PER_BATCH = 4096
 REPR_LAYERS = layers
 
 # Loading the pretrained model and alphabet for tokenization
+print("Loading model...")
 model, alphabet = pretrained.load_model_and_alphabet(MODEL_LOCATION)
 model.eval()  # Setting the model to evaluation mode
 
@@ -71,6 +81,7 @@ if torch.cuda.is_available():
     model = model.cuda()
     print("Transferred model to GPU")
 
+print('Loading and batching input sequences...')
 # Creating a dataset from the input fasta file
 dataset = FastaBatchedDataset.from_file(fasta_file)
 # Generating batch indices based on token count
@@ -111,11 +122,16 @@ with torch.no_grad():
         # Mean pooling representations for each sequence, excluding the beginning-of-sequence (bos) token
         for i, label in enumerate(labels):
             try:
-                cdr3_sequence = cdr3_df[cdr3_df['id'] == label]['cdr3_sequence'].values[0]
+                cdr3_sequence = cdr3_dict[label]
             except:
-                print(f'No cdr3 sequence found for {label}')
+                if label not in missing_keys:
+                    print(f'No cdr3 sequence found for {label}')
                 continue
-            full_sequence = fasta_sequences[fasta_sequences['id'] == label]['sequence'].values[0] 
+            print(f'Processing {label}')
+            full_sequence = fasta_sequences[label]
+
+
+
             # remove '-' from cdr3_sequence
             cdr3_sequence = cdr3_sequence.replace('-', '')
 
@@ -143,4 +159,3 @@ for layer in mean_representations.keys():
 
     output_file = output_file.replace('.pt', f'_layer_{layer}.pt')
     torch.save(mean_representations[layer], output_file)
-    
