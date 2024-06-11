@@ -1,7 +1,3 @@
-<<<<<<< Updated upstream
-
-
-=======
 from functools import partial
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,9 +41,9 @@ def analyze_neighbors(instance, indices, n, id_affinity_label):
     return result, label_result, knn_perc
 
 
->>>>>>> Stashed changes
 class Vicinity_analysis:
     # TO DO:
+    #---------!!!!!!!!!!!! add the summary resut  from euclidian radius to the save_pickle and load_from_pickle methods !!!!!!!!
     # - Add Marina and Evgenii types of anaylsis
     # - Add Marina and Evgenii plots
     # - uniform data structures or think of a uniform new one (like the multidim array)
@@ -62,48 +58,41 @@ class Vicinity_analysis:
     def __init__( self, df,neighbor_numbers,id_index, colname_affinity='affinity', colname_junction='junction_aa', metric= "euclidean"  ):
         self.df=df
         self.neighbor_numbers= neighbor_numbers
-<<<<<<< Updated upstream
-        self.neigh = NearestNeighbors()
-        self.neigh.fit(list(self.df['embedding']))
-=======
         self.colname_affinity=colname_affinity
         self.colname_junction=colname_junction
         self.metric = metric
         # self.neigh = NearestNeighbors()
         # self.neigh.fit(list(self.df['embedding']))
->>>>>>> Stashed changes
         self.id_index=id_index
+        print(f"Analysis initialized for index {len(id_index)} with neighbor numbers: {neighbor_numbers}")
         #self.parameters=  TO DO , PASTe THE INPUT PARAMETERS to have a record of the anaylsis done
-    
+        
     def run_analysis(self):
-        self.fractions_results,self.NN_id,self.NN_dist, self.NN_label, self.NN_lev, self.ID_labels = self.calculate_fractions_for_data()
+        print("Running the analysis...")
+        start_time = time.time()
+        self.fractions_results, self.NN_id, self.NN_dist, self.NN_label, self.NN_lev, self.ID_labels = self.calculate_fractions_for_data()
         self.result_dict = dict(zip(self.neighbor_numbers, self.fractions_results))
-        print( self.result_dict )
+        print(f"Analysis results: {self.result_dict}")
+        print(f"Total analysis time: {time.time() - start_time:.2f} seconds")
         return self
         
     def save_to_pickle(self,file_name):
         data_to_save = {
+        "neighbor_numbers": self.neighbor_numbers,
+        "neigh": self.neigh ,
+        "id_index" :self.id_index,
         "fractions_results": self.fractions_results,
         "NN_id": self.NN_id,
         "NN_dist": self.NN_dist,
         "NN_label": self.NN_label,
         "NN_lev": self.NN_lev,
-<<<<<<< Updated upstream
-        "ID_labels": self.ID_labels
-=======
         "ID_labels": self.ID_labels,
         "summary_results": self.summary_results,
         "label_results": self.label_results,
->>>>>>> Stashed changes
         #"analysis_info": self.paramters
         }
         with open(file_name, 'wb') as file:
             pickle.dump(data_to_save, file)
-<<<<<<< Updated upstream
-        
-        
-    def calculate_fractions_for_data(self):
-=======
             
     @classmethod    
     def load_from_pickle(cls, file_name, df_default=None, neighbor_numbers_default=None, id_index_default=None):
@@ -132,7 +121,6 @@ class Vicinity_analysis:
         self.df['junction_aa']= self.df[self.colname_junction]
         self.neigh = NearestNeighbors(metric=self.metric)
         self.neigh.fit(list(self.df['embedding']))
->>>>>>> Stashed changes
         # Compute the nearest neighbors for the maximum number of neighbors needed
         print("Compunting KNN ...")
         distances, indices = self.neigh.kneighbors(self.df.iloc[self.id_index]['embedding'].tolist(), n_neighbors=max(self.neighbor_numbers))
@@ -141,19 +129,6 @@ class Vicinity_analysis:
         # Redimension affinity values array to corrispond to indices shape
         id_affinty_label=self.df.loc[self.id_index, 'affinity']
         indices_affinity_mat = indices_affinity.reshape(indices.shape)
-<<<<<<< Updated upstream
-        t_lev= time.time()
-        lev_mat=[]
-        for idx, seq_index in enumerate(self.id_index):
-            NN_index=indices[idx]
-            lev_mat.append(compute_levenshtein(self.df.iloc[seq_index]['junction_aa'],self.df.iloc[NN_index]['junction_aa']) )
-        lev_mat= np.array(lev_mat)
-        print(f' LEV running time {time.time()-t_lev}')
-        t_NN= time.time()
-        for n in self.neighbor_numbers:
-            result = self._calculate_fractions_for_subset(indices, [n])
-            fractions_results.append(result)
-=======
         t_lev= time.time()        
         print("Computing Levenshtein distances...")
         lev_mat = []
@@ -196,7 +171,6 @@ class Vicinity_analysis:
             tmp_label_res.append(label_result)
             knn_vicinity.append(knn_perc)
         
->>>>>>> Stashed changes
         print(f' NN running time {time.time()-t_lev}')
         knn_vicinity= np.array(knn_vicinity)
         # We create an empty DataFrame and fill it with the results
@@ -236,10 +210,11 @@ class Vicinity_analysis:
         perc = (neighbors_affinity == given_affinity).sum() / len(neighbors_affinity)    
         return perc
         
-    def calculate_percentages_with_precomputed_distances(self, distance_thresholds):
+    def perc_Euclidian_radius(self, distance_thresholds):
         results, LD1_res, LD2_res = [], [], []
         res_df = pd.DataFrame(columns=[f'EU_{i}' for i in distance_thresholds])
         mean_num_points = []
+        summary_data = []
         for threshold in distance_thresholds:
             print(f'Computing radius at thr {threshold}...')
             percentages, LD1_list, LD2_list, num_of_points_within_rad = [], [], [], []
@@ -285,9 +260,6 @@ class Vicinity_analysis:
             LD1_res.append(np.nanmean(LD1_list))
             LD2_res.append(np.nanmean(LD2_list))
             mean_num_points.append(np.mean(num_of_points_within_rad))
-<<<<<<< Updated upstream
-            res_df[f'EU_{threshold}'] = percentages
-=======
             res_df[f'EU_{threshold}'] = percentages          
             #Store results in the summary DataFrame
             summary_row=({
@@ -310,19 +282,13 @@ class Vicinity_analysis:
         # Create and store the DataFrame in the class attribute
         self.summary_results = pd.DataFrame(summary_data)
         #Printing results
->>>>>>> Stashed changes
         for idx,i in enumerate(res_df.columns):
             null_points=sum(res_df[i].isna())
-            print(f'{i}:{results[idx]:.4f} ,n_points= {mean_num_points_LV[idx]:.4f}, %null={null_points/len(res_df[i])*100:.4f}, perc_of_LD1= {LD1_res[idx]:.4f}, perc_of_LD2= {LD2_res[idx]:.4f}')
-        
+            print(f'{i}:{results[idx]:.4f} ,n_points= {mean_num_points[idx]:.4f}, %null={null_points/len(res_df[i])*100:.4f}, perc_of_LD1= {LD1_res[idx]:.4f}, perc_of_LD2= {LD2_res[idx]:.4f}')
+            
         return results, res_df, mean_num_points, LD1_res, LD2_res        
 
 
-<<<<<<< Updated upstream
-vicinity_analysis_instance = Vicinity_analysis(df, neighbor_numbers, id_index_sample)
-vicinity_analysis_instance.run_analysis()  # This populates the necessary attributes
-distance_thresholds = range(7, 20)  # Define your distance thresholds
-=======
 def calculate_moran_index(distance_mat, NN_id_mat, label_target, distance_threshold, weight_distance=False):
     # Define who are the neighbors -- EU or LD threshold
     print("calc spatial matrix")
@@ -429,123 +395,7 @@ def prepare_data_for_plotting(df, LD_dist , sampled_indices= None, junction_aa_c
     
     return df_combined, df_summary 
 
->>>>>>> Stashed changes
-
-# Now you can call the new method with these precomputed values
-percentages_results11, res_df11, mean_num_points11, LD1_res1, LD2_res1 = vicinity_analysis_instance.calculate_percentages_with_precomputed_distances(distance_thresholds)
-
-<<<<<<< Updated upstream
-for idx, i in enumerate(res_df11.columns):
-    null_points = sum(res_df11[i].isna())
-    print(f'{i}:{percentages_results11[idx]:.4f} ,n_points= {mean_num_points11[idx]:.4f}, %null={null_points/len(res_df11[i])*100:.4f}, perc_of_LD1= {LD1_res1[idx]:.4f}, perc_of_LD2= {LD2_res1[idx]:.4f}')
-
-
-=======
->>>>>>> Stashed changes
-class VicinityPlots:
-    def __init__(self, vicinity_instance=None):
-        if vicinity_instance:
-            self.vicinity_instance = vicinity_instance
-            self.neighbor_numbers = vicinity_instance.neighbor_numbers
-            self.fractions_results = vicinity_instance.fractions_results
-            self.NN_lev = vicinity_instance.NN_lev
-            self.NN_dist = vicinity_instance.NN_dist
-            self.df = vicinity_instance.df
-        else:
-            self.vicinity_instance = None
-
-    def plot_basic_vicinity_score(self,file_name, fractions_results=None, neighbor_numbers=None):
-        if self.vicinity_instance:
-            fractions_results = self.fractions_results
-            neighbor_numbers = self.neighbor_numbers
-        elif fractions_results is None or neighbor_numbers is None:
-            raise ValueError("Fraction results and neighbor numbers must be provided")
-
-        plt.figure(figsize=(10, 6))
-        plt.scatter(neighbor_numbers, fractions_results, color='blue', label='Data Points')
-        plt.plot(neighbor_numbers, fractions_results, color='red', label='Interpolated Line')
-        plt.title('Fraction Results by Number of Neighbors')
-        plt.xlabel('Number of Neighbors')
-        plt.ylabel('Fraction Results')
-        plt.grid(True)
-        plt.legend()
-        plt.savefig(f'Vicinity_score_NN_{file_name}.png')
-
-    def plot_combined_fraction_results_vs_LD(self,file_name,fractions_results=None, NN_lev=None, neighbor_numbers=None):
-        if self.vicinity_instance:
-            NN_lev = self.NN_lev
-            neighbor_numbers = self.neighbor_numbers
-            fractions_results=self.fractions_results
-        elif neighbor_numbers is None or fractions_results is None or NN_lev is None:
-            raise ValueError("Fraction results, NN_lev, neighbor numbers must be provided")
-        
-        NN_lev_mean=[]
-        row_mean=[]
-        for n in neighbor_numbers:
-          for i in range(len(NN_lev[:,])):
-            row_mean.append(np.mean(NN_lev[i,1:n+1]) )
-          # print(row_mean)
-          # print(len(row_mean))
-          NN_lev_mean.append(np.mean(row_mean) )
-          row_mean=[]
-        corr_pearson_NN_thr, _ = pearsonr(self.fractions_results, NN_lev_mean)
-        
-        plt.figure(figsize=(10, 6))
-        ax1 = plt.gca()
-        ax1.scatter( neighbor_numbers, fractions_results, color='blue', label='AB2 embeddings eucl. distance')
-        ax1.set_xlabel('Number of Neighbors')
-        ax1.set_ylabel('Fraction Results', color='blue')
-        ax1.set_xticks(fractions_results)
-        ax1.tick_params(axis='y', labelcolor='blue')
-        ax1.grid(True)
-        
-        ax2 = ax1.twinx()
-        ax2.scatter(neighbor_numbers, NN_lev_mean, color='red', label='LD distance')
-        ax2.set_ylabel('Mean Lev', color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
-        
-        plt.title(f'AB2 EU vs LD by kNN__ pearsonCorr = {corr_pearson_NN_thr}')
-        plt.savefig('combined_graph_EUvsLD_kNN.png')
-<<<<<<< Updated upstream
-=======
-        
-    def KNNvsFraction(self,file_name,fractions_results=None, NN_lev=None, neighbor_numbers=None):
-        if self.vicinity_instance:
-            NN_lev = self.NN_lev
-            neighbor_numbers = self.neighbor_numbers
-            fractions_results=self.fractions_results
-        elif neighbor_numbers is None or fractions_results is None or NN_lev is None:
-            raise ValueError("Fraction results, NN_lev, neighbor numbers must be provided")
-        
-        NN_lev_mean=[]
-        row_mean=[]
-        for n in neighbor_numbers:
-          for i in range(len(NN_lev[:,])):
-            row_mean.append(np.mean(NN_lev[i,1:n+1]) )
-          # print(row_mean)
-          # print(len(row_mean))
-          NN_lev_mean.append(np.mean(row_mean) )
-          row_mean=[]
-        corr_pearson_NN_thr, _ = pearsonr(self.fractions_results, NN_lev_mean)
-        
-        plt.figure(figsize=(10, 6))
-        ax1 = plt.gca()
-        ax1.scatter( neighbor_numbers, fractions_results, color='blue', label='AB2 embeddings eucl. distance')
-        ax1.set_xlabel('Number of Neighbors')
-        ax1.set_ylabel('Fraction Results', color='blue')
-        ax1.set_xticks(fractions_results)
-        ax1.tick_params(axis='y', labelcolor='blue')
-        ax1.grid(True)
-        
-        ax2 = ax1.twinx()
-        ax2.scatter(neighbor_numbers, NN_lev_mean, color='red', label='LD distance')
-        ax2.set_ylabel('Mean Lev', color='red')
-        ax2.tick_params(axis='y', labelcolor='red')
-        
-        plt.title(f'AB2 EU vs LD by kNN__ pearsonCorr = {corr_pearson_NN_thr}')
-        plt.savefig('combined_graph_EUvsLD_kNN.png')
-        
-        
+       
 
 
 def run_ggplot_vicinity( analysis_name  , input_ED,input_LD, output_path= None):
@@ -574,84 +424,3 @@ def run_ggplot_vicinity( analysis_name  , input_ED,input_LD, output_path= None):
 
 
 
-
-
-
-
-import numpy as np
-import pandas as pd
-from multiprocessing import Pool, Value, Manager
-from tqdm import tqdm
-from joblib import Parallel, delayed
-from tqdm_joblib import tqdm_joblib
-
-def worker_by_threshold(lev_dist, sampled_indices, df):
-    num_samples = len(sampled_indices)
-    results = np.zeros(num_samples)
-    num_of_points = np.zeros(num_samples)
-    affinities = []
-    
-    for i, index in enumerate(sampled_indices):
-        initial_affinity = df.loc[index, 'affinity']
-        initial_seq = df.loc[index, 'junction_aa']
-        affinities.append(initial_affinity)
-        
-        lev_dists = compute_levenshtein(initial_seq, df.iloc[1:]['junction_aa'])
-        indices_at_dist = [j for j, x in enumerate(lev_dists) if x == lev_dist]
-        if indices_at_dist:
-            affinities_at_dist = df.iloc[indices_at_dist]['affinity']
-            percentage = sum(affinities_at_dist == initial_affinity) / len(affinities_at_dist)
-            results[i] = percentage
-            num_of_points[i] = len(affinities_at_dist)
-        else:
-            results[i] = np.nan
-            num_of_points[i] = 0
-    
-    return lev_dist, results, num_of_points, affinities
-
-def prepare_data_for_plotting(df, LD_dist, sampled_indices=None, junction_aa_col='junction_aa', affinity_col='affinity'):
-    df['affinity'] = df[affinity_col]
-    df['junction_aa'] = df[junction_aa_col]
-    
-    if sampled_indices is None:
-        sampled_indices = df.index
-    num_samples = len(sampled_indices)
-    
-    results = np.zeros((num_samples, LD_dist))
-    num_of_points = np.zeros((num_samples, LD_dist))
-    affinities = np.zeros((num_samples, LD_dist), dtype=object)
-    
-    tasks = [(lev_dist, sampled_indices, df) for lev_dist in range(1, LD_dist + 1)]
-    
-    with tqdm_joblib(desc="Processing Levenshtein distances", total=len(tasks)) as progress_bar:
-        results_list = Parallel(n_jobs=16)(delayed(worker_by_threshold)(lev_dist, sampled_indices, df) for lev_dist in range(1, LD_dist + 1))
-    
-    for lev_dist, res, num_pts, aff in results_list:
-        results[:, lev_dist - 1] = res
-        num_of_points[:, lev_dist - 1] = num_pts
-        affinities[:, lev_dist - 1] = aff
-    
-    columns = [f'LD_{i}' for i in range(1, LD_dist + 1)]
-    df_combined = pd.DataFrame({
-        **{f'Perc_{col}': results[:, idx] for idx, col in enumerate(columns)},
-        **{f'Num_{col}': num_of_points[:, idx] for idx, col in enumerate(columns)},
-        'sample_id': sampled_indices,
-        'affinity': np.max(affinities, axis=1)  # Assuming same affinity across all thresholds for each sample
-    })
-    
-    df_summary = pd.DataFrame()
-    for col in columns:
-        df_combined[f'NaN_Count_{col}'] = df_combined[f'Perc_{col}'].isna()
-        summary_stats = df_combined.groupby('affinity')[[f'Num_{col}', f'NaN_Count_{col}']].agg({
-            f'Num_{col}': 'mean',
-            f'NaN_Count_{col}': 'mean'
-        }).rename(columns={f'Num_{col}': f'Avg_Num_{col}', f'NaN_Count_{col}': f'Avg_NaN_Percentage_{col}'})
-        df_summary = pd.concat([df_summary, summary_stats], axis=1)
-    
-    grouped = df_combined.groupby('affinity')
-    df_summary[[f'Num_of_LD_{i}' for i in range(1, LD_dist + 1)]] = grouped[[f'Perc_LD_{i}' for i in range(1, LD_dist + 1)]].count()
-    df_summary[[f'Perc_LD_{i}' for i in range(1, LD_dist + 1)]] = grouped[[f'Perc_LD_{i}' for i in range(1, LD_dist + 1)]].mean()
-    
-    return df_combined, df_summary
-
->>>>>>> Stashed changes
