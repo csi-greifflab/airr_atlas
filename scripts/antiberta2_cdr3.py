@@ -8,13 +8,11 @@ Args:
 """
 
 import torch
-from esm import FastaBatchedDataset
 from transformers import RoFormerTokenizer, RoFormerModel
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 import argparse
 from Bio import SeqIO
-import os
 import csv
 
 
@@ -40,19 +38,15 @@ cdr3_path = args.cdr3_path
 context = args.context
 layers = list(map(int, args.layers[0].split()))
 
-########test
+######## debug
+#import os
 #os.environ["CUDA_VISIBLE_DEVICES"]="1"
 #fasta_path = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains.fa'
 #output_path = '/doctorai/userdata/airr_atlas/test/test_cdr3.pt'
 #cdr3_path = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains/wang_H_full_chains_cdr3.csv'
 #context = 0
 #layers = list(range(1,17))
-
-# Load cdr3 sequences and store in dictionary
-with open(cdr3_path) as f:
-    reader = csv.reader(f)
-    cdr3_dict = {rows[0]:rows[1] for rows in reader}
-#######
+    
 # convert fasta into dictionary
 def fasta_to_dict(fasta_file):
     print('Loading and batching input sequences...')
@@ -62,12 +56,16 @@ def fasta_to_dict(fasta_file):
             seq_dict[record.id] = " ".join(str(record.seq)) # AA tokens for hugging face models must be gapped
             # print progress
             if len(seq_dict) % 1000 == 0:
-                return seq_dict
                 print(f'{len(seq_dict)} sequences loaded')
     return seq_dict
 
 # Read sequences from the FASTA file
 sequences = fasta_to_dict(fasta_path)
+
+# Load cdr3 sequences and store in dictionary
+with open(cdr3_path) as f:
+    reader = csv.reader(f)
+    cdr3_dict = {rows[0]:rows[1] for rows in reader}
 
 # TODO investigate missing_keys
 missing_keys = [key for key in sequences.keys() if key not in cdr3_dict.keys()]
@@ -75,11 +73,8 @@ missing_keys = [key for key in sequences.keys() if key not in cdr3_dict.keys()]
 
 # Pre-defined parameters for optimization
 MODEL_NAME = "alchemab/antiberta2-cssp"
-BATCH_SIZE = 4096  # Adjust based on your GPU's memory
+BATCH_SIZE = 2048  # Adjust based on your GPU's memory
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#device = torch.device("cpu")
-
-
 tokenizer = RoFormerTokenizer.from_pretrained(MODEL_NAME)
 model = RoFormerModel.from_pretrained(MODEL_NAME).to(device)
 model.eval()
@@ -94,7 +89,9 @@ total_sequences = len(sequences)
 counter = 0
 for sequence in sequences.values():
     counter += 1
-    tokens = tokenizer(sequence,truncation=True, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=200)
+    #tokens = tokenizer(sequence,truncation=True, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=200)
+    #tokenize sequences without truncation or padding
+    tokens = tokenizer(sequence,truncation=False, padding=False, return_tensors="pt",add_special_tokens=True, max_length=200)
     #print( tokenizer.decode(tokens['input_ids'][0]))
     input_ids.append(tokens['input_ids'])
     attention_masks.append(tokens['attention_mask'])
@@ -145,7 +142,7 @@ with torch.no_grad():
                     continue
                 print(f'Processing {label}')
 
-                # load sequence without gaps
+                # load sequence without spaces
                 full_sequence = sequences[label].replace(' ', '')
 
                 # remove '-' from cdr3_sequence
@@ -166,13 +163,8 @@ with torch.no_grad():
                     mean_representation = representations[layer][counter, start : end].mean(0).clone()
                     # We take mean_representation[0] to keep the [array] instead of [[array]].
                     mean_representations[layer].append(mean_representation)
-        
 
-        # #print(embeddings)
-        # first_token_batch = embeddings[:, 0, :]
-        # #print(first_token_batch)
-        # all_embeddings.append(first_token_batch.cpu())
-        # Correctly print the progress
+        # print the progress
         print(
             f"Processing {batch_idx + 1} of {total_batches} batches ({input_ids.size(0)} sequences)"
         )
