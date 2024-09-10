@@ -1,0 +1,54 @@
+# Check in the Vicinity_ggplot.r that the libraries you installed are from the correct folder location!
+#for more info about each argument , check the vicinity_pipeline.py code
+
+python Vicinity_pipeline.py \
+    --analysis_name try_sep \
+    --input_metadata /doctorai/niccoloc/merged_df_may_2024_preprocessed_V2.csv \
+    --input_embeddings /doctorai/evgeniie/AIRR_atlas_2023/output/antiberta_merged_df_may_preprocessed.pt \
+    --precomputed_LD /doctorai/niccoloc/d_mean1_summary_LD_Ag_spec_whole_0k.csv \
+    --save_results True \
+    --compute_LD False \
+    --plot_results True \
+    --df_junction_colname junction_aa \
+    --df_affinity_colname specificity \
+    --sample_size 1100 \
+    --LD_sample_size 100
+
+
+python Vicinity_pipeline.py \
+    --analysis_name Tz_layer6_1to12_v2 \
+    --input_metadata /doctorai/niccoloc/Tz_6_UMAP_XY.csv \
+    --input_embeddings /doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_heavy_chains_cdr3_layer_6.pt \
+    --precomputed_LD /doctorai/niccoloc/airr_atlas/Vicinity_results/Tz/d_mean1_summary_LD_Tz_10k.csv \
+    --radius_range 1,12 \
+    --save_results True \
+    --compute_LD False \
+    --plot_results True 
+
+
+
+    --input_metadata /doctorai/niccoloc/trastuzumab_metadata.csv \
+
+
+
+/doctorai/userdata/airr_atlas/data/embeddings
+
+#for more info about each argument , check the vicinity_pipeline.py code
+
+
+"""examples of files """
+
+analysis_name= "Tz"                 
+df_junction_colname="junction_aa"
+df_affinity_colname="affinity"
+input_metadata=f'/doctorai/niccoloc/trastuzumab_metadata.csv'
+input_embeddings=f'/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_AB2_CSSP.pt'
+
+
+
+analysis_name= "Ag_spec_whole"
+df_junction_colname="junction_aa"
+df_affinity_colname="specificity"
+input_metadata=f'/doctorai/niccoloc/merged_df_may_2024_preprocessed_V2.csv'
+input_embeddings=f'/doctorai/evgeniie/AIRR_atlas_2023/output/antiberta_merged_df_may_preprocessed.pt'
+input_precomputed_LD_d_mean1= "/doctorai/niccoloc/d_mean1_summary_LD_Ag_spec_whole_0k.csv"
