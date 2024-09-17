@@ -6,50 +6,67 @@ Args:
     fasta_path (str): Path to the fasta file.
     output_path (str): Path to save the output tensor.
 """
+import os
+import argparse
 import torch
 from esm import FastaBatchedDataset, pretrained
-import argparse
-import numpy as np
 from Bio import SeqIO
 import csv
 
-
 # Parsing command-line arguments for input and output file paths
-parser = argparse.ArgumentParser(description="Input path")
-parser.add_argument("--fasta_path", type=str, required=True,
+PARSER = argparse.ArgumentParser(description="Input path")
+PARSER.add_argument("--fasta_path", type=str, required=True,
                     help="Fasta path + filename.fa")
-parser.add_argument("--output_path", type=str, required=True,
+PARSER.add_argument("--output_path", type=str, required=True,
                     help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'.")
-parser.add_argument("--cdr3_path", default = None, type=str,
+PARSER.add_argument("--cdr3_path", default = None, type=str,
                     help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
-parser.add_argument("--context", default = 0,type=int,
+PARSER.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
-parser.add_argument("--layers", type=str, nargs='*', default="-1",
+PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
 
-args = parser.parse_args()
+ARGS = PARSER.parse_args()
 
 # Storing the input and output file paths
-fasta_file = args.fasta_path
-output_file = args.output_path
-cdr3_path = args.cdr3_path
-context = args.context
-layers = list(map(int, args.layers[0].split()))
+FASTA_FILE = ARGS.fasta_path
+OUTPUT_FILE = ARGS.output_path
+CDR3_PATH = ARGS.cdr3_path
+CONTEXT = ARGS.context
+LAYERS = list(map(int, ARGS.layers[0].split()))
 
 #debug values
-#fasta_file = '/doctorai/userdata/airr_atlas/data/sequences/first_10.fasta'
-#fasta_file = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains.fa'
-#output_file = '/doctorai/userdata/airr_atlas/test_cdr3.pt'
-#cdr3_path = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains/wang_H_full_chains_cdr3.csv'
-#context = 0
+#FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/100k_sample_tz_heavy_chain.fa'
+#FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains.fa'
+#OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
+#LAYERS = list(range(1,33 + 1))
+#LAYERS = list(range(1,33 + 1))
+#CDR3_PATH = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/trastuzumab_cdr3_heavy.csv'
+#CONTEXT = None
 
+# Check if output directory exists and creates it if it's missing
+if not os.path.exists(os.path.dirname(OUTPUT_FILE)):
+
+    # if the demo_folder directory is not present  
+    # then create it. 
+    os.makedirs(os.path.dirname(OUTPUT_FILE))
 # Load cdr3 sequences and store in dictionary
-with open(cdr3_path) as f:
-    reader = csv.reader(f)
-    cdr3_dict = {rows[0]:rows[1] for rows in reader}
+if CDR3_PATH:
+    with open(CDR3_PATH) as f:
+        reader = csv.reader(f)
+        CDR3_DICT = {rows[0]:rows[1] for rows in reader}
 
 # convert fasta into dictionary
 def fasta_to_dict(fasta_file):
+    """
+    Converts a fasta file into a dictionary with sequence IDs as keys and sequences as values.
+
+    Args:
+        fasta_file (str): Path to the fasta file.
+
+    Returns:
+        dict: A dictionary with sequence IDs as keys and sequences as values.
+    """
     print('Loading and batching input sequences...')
     seq_dict = {}
     with open(fasta_file) as f:
@@ -61,101 +78,134 @@ def fasta_to_dict(fasta_file):
     return seq_dict            
 
 
-fasta_sequences = fasta_to_dict(fasta_file)
+FASTA_SEQUENCES = fasta_to_dict(FASTA_FILE)
+
+# make sure FASTA_SEQUENCES and CDR3_DICT have the same keys
+if CDR3_PATH:
+    FASTA_KEYS = set(FASTA_SEQUENCES.keys())
+    CDR3_KEYS = set(CDR3_DICT.keys())
+    missing_keys = FASTA_KEYS - CDR3_KEYS
+    for key in missing_keys:
+        FASTA_SEQUENCES.pop(key)
 
 # TODO investigate missing_keys
-missing_keys = [key for key in fasta_sequences.keys() if key not in cdr3_dict.keys()]
+if CDR3_PATH:
+    missing_keys = [key for key in FASTA_SEQUENCES.keys() if key not in CDR3_DICT.keys()]
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
 TOKS_PER_BATCH = 4096
-REPR_LAYERS = layers
 
 # Loading the pretrained model and alphabet for tokenization
 print("Loading model...")
-model, alphabet = pretrained.load_model_and_alphabet(MODEL_LOCATION)
-model.eval()  # Setting the model to evaluation mode
+MODEL, ALPHABET = pretrained.load_model_and_alphabet(MODEL_LOCATION)
+MODEL.eval()  # Setting the model to evaluation mode
 
 # Moving the model to GPU if available for faster processing
 if torch.cuda.is_available():
-    model = model.cuda()
+    MODEL = MODEL.cuda()
     print("Transferred model to GPU")
 
 print('Loading and batching input sequences...')
 # Creating a dataset from the input fasta file
-dataset = FastaBatchedDataset.from_file(fasta_file)
+DATASET = FastaBatchedDataset.from_file(FASTA_FILE)
 # Generating batch indices based on token count
-batches = dataset.get_batch_indices(TOKS_PER_BATCH, extra_toks_per_seq=1)
+BATCHES = DATASET.get_batch_indices(TOKS_PER_BATCH, extra_toks_per_seq=1)
 # DataLoader to iterate through batches efficiently
-data_loader = torch.utils.data.DataLoader(
-    dataset, collate_fn=alphabet.get_batch_converter(), batch_sampler=batches
+DATA_LOADER = torch.utils.data.DataLoader(
+    DATASET, collate_fn=ALPHABET.get_batch_converter(), batch_sampler=BATCHES
 )
 
-print(f"Read {fasta_file} with {len(dataset)} sequences")
+print(f"Read {FASTA_FILE} with {len(DATASET)} sequences")
 
 # Checking if the specified representation layers are valid
-assert all(-(model.num_layers + 1) <= i <= model.num_layers for i in REPR_LAYERS)
-repr_layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in REPR_LAYERS]
+assert all(-(MODEL.num_layers + 1) <= i <= MODEL.num_layers for i in LAYERS)
+
+LAYERS = [(i + MODEL.num_layers + 1) % (MODEL.num_layers + 1) for i in LAYERS]
 
 # Initializing lists to store mean representations and sequence labels
-mean_representations = {layer: [] for layer in repr_layers}
-seq_labels = []
-
+mean_representations = {layer: [] for layer in LAYERS}
+sequence_labels = []
 # Processing each batch without computing gradients (to save memory and computation)
 with torch.no_grad():
-    for batch_idx, (labels, strs, toks) in enumerate(data_loader):
+    for batch_idx, (labels, strs, toks) in enumerate(DATA_LOADER):
         print(
-            f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
+            f"Processing {batch_idx + 1} of {len(BATCHES)} batches ({toks.size(0)} sequences)"
         )
+        
+
         # Moving tokens to GPU if available
         if torch.cuda.is_available():
             toks = toks.to(device="cuda", non_blocking=True)
 
         # Computing representations for the specified layers
-        out = model(toks, repr_layers=repr_layers, return_contacts=False)
+        out = MODEL(toks, repr_layers=LAYERS, return_contacts=False)
 
         # Extracting layer representations and moving them to CPU
         representations = {
             layer: t.to(device="cpu") for layer, t in out["representations"].items()
         }
-        
-        # Mean pooling representations for each sequence, excluding the beginning-of-sequence (bos) token
-        for i, label in enumerate(labels):
-            try:
-                cdr3_sequence = cdr3_dict[label]
-            except:
-                if label not in missing_keys:
-                    print(f'No cdr3 sequence found for {label}')
-                continue
-            print(f'Processing {label}')
-            full_sequence = fasta_sequences[label]
+
+        if CDR3_PATH is None:
+            for counter, label in enumerate(labels):
+                sequence_labels.append(label)
+                for layer in LAYERS:
+                    mean_representation = (
+                        representations[layer][counter, 1: len(strs[counter]) + 1]
+                        .mean(0)
+                        .clone()
+                    )
+                    # We take mean_representation[0] to keep the [array] instead of [[array]].
+                    mean_representations[layer].append(mean_representation)
+        else:
+            # Mean pooling representations for each sequence,
+            # excluding the beginning-of-sequence (bos) token
+            for i, label in enumerate(labels):
+                try:
+                    cdr3_sequence = CDR3_DICT[label]
+                except KeyError:
+                    if label not in missing_keys:
+                        print(f'No cdr3 sequence found for {label}')
+                    continue
+                
+                #print(f'Processing {label}')
+                full_sequence = FASTA_SEQUENCES[label]
 
 
 
-            # remove '-' from cdr3_sequence
-            cdr3_sequence = cdr3_sequence.replace('-', '')
+                # remove '-' from cdr3_sequence
+                cdr3_sequence = cdr3_sequence.replace('-', '')
 
-            # get position of cdr3_sequence in sequence
-            start = full_sequence.find(cdr3_sequence) - context
-            end = start + len(cdr3_sequence) + context
-            seq_labels.append(label)
-            for layer in representations.keys():
-                mean_representation = representations[layer][i, start : end].mean(0).clone()
-                # We take mean_representation[0] to keep the [array] instead of [[array]].
-                mean_representations[layer].append(mean_representation)
+                # get position of cdr3_sequence in sequence
+                start = full_sequence.find(cdr3_sequence) - CONTEXT
+                end = start + len(cdr3_sequence) + CONTEXT
+                sequence_labels.append(label)
+                for layer in LAYERS:
+                    mean_representation = representations[layer][i, start : end].mean(0).clone()
+                    # We take mean_representation[0] to keep the [array] instead of [[array]].
+                    mean_representations[layer].append(mean_representation)
+print('Finished processing sequences')
 
-            #mean_representation = [t[i, start : end].mean(0).clone()
-            #        for layer, t in representations.items()]
+# Clear GPU memory
+print("Clearing GPU memory...")
+torch.cuda.empty_cache()
 
-
-
-# Sorting the representations based on sequence labels
-ordering = np.argsort([int(i) for i in seq_labels])
-
+print("Saving mean representations to output file...")
 # Stacking all mean representations into a single tensor and save to output file
-for layer in mean_representations.keys():
-    mean_representations[layer] = torch.vstack(mean_representations[layer])
-    mean_representations[layer] = mean_representations[layer][ordering, :]
 
-    output_file = output_file.replace('.pt', f'_layer_{layer}.pt')
-    torch.save(mean_representations[layer], output_file)
+# Save mean pooled representations for each layer to a separate file
+for layer in LAYERS:
+    # concattenate sequence labels to the tensor
+    mean_representations[layer] = torch.vstack(mean_representations[layer])
+
+    output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
+    torch.save(mean_representations[layer], output_file_layer)
+    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
+
+# Save sequence labels to a csv file
+output_file_idx = OUTPUT_FILE.replace('.pt', '_idx.csv')
+with open(output_file_idx, 'w') as f:
+    f.write('index,sequence_id\n')
+    for i, label in enumerate(sequence_labels):
+        f.write(f'{i},{label}\n')
+print(f"Saved sequence indices to {output_file_idx}")
