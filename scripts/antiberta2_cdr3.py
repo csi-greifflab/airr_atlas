@@ -30,7 +30,8 @@ PARSER.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
 PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-
+PARSER.add_argument("--pooling", type=bool, nargs='*', default=True,
+                    help="Whether to pool the embeddings or not. Default is True.")
 args = PARSER.parse_args()
 
 # Storing arguments
@@ -39,6 +40,10 @@ OUTPUT_PATH = args.output_path
 CDR3_PATH = args.cdr3_path
 CONTEXT = args.context
 LAYERS = list(map(int, args.layers[0].split()))
+if args.pooling:
+    POOLING = True
+else:
+    POOLING = False
 
 ######## debug
 #import os
@@ -53,6 +58,15 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
 
 # convert fasta into dictionary
 def fasta_to_dict(fasta_file):
+    """
+    Convert a fasta file into a dictionary.
+
+    Args:
+        fasta_file (str): Path to the fasta file.
+
+    Returns:
+        dict: A dictionary where the keys are the sequence IDs and the values are the sequences.
+    """
     print('Loading and batching input sequences...')
     seq_dict = {}
     with open(fasta_file) as f:
@@ -68,18 +82,16 @@ SEQUENCES = fasta_to_dict(FASTA_PATH)
 
 # Check if output directory exists and creates it if it's missing
 if not os.path.exists(os.path.dirname(OUTPUT_PATH)):
-
-    # if the demo_folder directory is not present  
-    # then create it. 
+    # if the directory is not present create it.
     os.makedirs(os.path.dirname(OUTPUT_PATH))
 
 # Load cdr3 sequences and store in dictionary
 if CDR3_PATH:
     with open(CDR3_PATH) as f:
-        reader = csv.reader(f)
-        cdr3_dict = {rows[0]:rows[1] for rows in reader}
+        READER = csv.reader(f)
+        CDR3_DICT = {rows[0]:rows[1] for rows in READER}
     # TODO investigate missing_keys
-    MISSING_KEYS = [key for key in SEQUENCES.keys() if key not in cdr3_dict.keys()]
+    MISSING_KEYS = [key for key in SEQUENCES if key not in CDR3_DICT]
 
 
 
@@ -137,23 +149,28 @@ with torch.no_grad():
         
         outputs = MODEL(input_ids=INPUT_IDS, attention_mask=attention_mask, output_hidden_states = True)
         # Extracting layer representations and moving them to CPU
-        representations = {}
-        for layer in LAYERS:
-            representations[layer] = outputs.hidden_states[layer].to(device="cpu")
+        representations = {layer: outputs.hidden_states[layer].to(device="cpu") for layer in LAYERS}
         
         # TODO add optional argument to return mean pooled full embedding even if cdr3_path is specified
         if CDR3_PATH is None:
-            for i, layer in enumerate(LAYERS):
-                for counter, label in enumerate(labels):
-                    mean_representation = representations[layer][counter, 1: len(SEQUENCES[label]) + 1].mean(0).clone()
-                    # We take mean_representation[0] to keep the [array] instead of [[array]].
-                    MEAN_REPRESENTATIONS[layer].append(mean_representation)
-                    if i == 1:
-                        SEQUENCE_LABELS.append(label)
+            # Append labels to SEQUENCE_LABELS
+            SEQUENCE_LABELS.extend(labels)
+            for layer in LAYERS:
+                if POOLING:
+                    MEAN_REPRESENTATIONS[layer].extend(
+                        representations[layer][i, 1: len(SEQUENCES[label]) + 1].mean(0).clone()
+                        for i, label in enumerate(labels)
+                    )
+                else:
+                    MEAN_REPRESENTATIONS[layer].extend(
+                        representations[layer][i, 1: len(SEQUENCES[label]) + 1].clone()
+                        for i, label in enumerate(labels)
+                    )
+                        
         else:
             for counter, label in enumerate(labels):
                 try:
-                    cdr3_sequence = cdr3_dict[label]
+                    cdr3_sequence = CDR3_DICT[label]
                 except KeyError:
                     if label not in MISSING_KEYS:
                         print(f'No cdr3 sequence found for {label}')
@@ -169,16 +186,19 @@ with torch.no_grad():
                 # get position of cdr3_sequence in sequence
                 try:
                     start = full_sequence.find(cdr3_sequence) - CONTEXT
-                except:
+                except ValueError:
                     print("Context window too large")
                 try:
                     end = start + len(cdr3_sequence) + CONTEXT
-                except:
+                except ValueError:
                     print("Context window too large")
                 SEQUENCE_LABELS.append(label)
 
                 for layer in LAYERS:
-                    mean_representation = representations[layer][counter, start : end].mean(0).clone()
+                    if POOLING:
+                        mean_representation = representations[layer][counter, start : end].mean(0).clone()
+                    else:
+                        mean_representation = representations[layer][counter, start : end].clone()
                     # We take mean_representation[0] to keep the [array] instead of [[array]].
                     MEAN_REPRESENTATIONS[layer].append(mean_representation)
 
@@ -193,13 +213,14 @@ torch.cuda.empty_cache()
 # Stacking representations of each layer into a single tensor and save to output file
 for layer in LAYERS:
     MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
-
     OUTPUT_PATH_LAYER = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
+    if POOLING:
+        OUTPUT_PATH_LAYER = OUTPUT_PATH_LAYER.replace('.pt', '_full.pt')
     torch.save(MEAN_REPRESENTATIONS[layer], OUTPUT_PATH_LAYER)
 
-output_file_idx = OUTPUT_PATH.replace('.pt', '_idx.csv')
-with open(output_file_idx, 'w') as f:
+OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
+with open(OUTPUT_FILE_IDX, 'w') as f:
     f.write('index,sequence_id\n')
     for i, label in enumerate(SEQUENCE_LABELS):
         f.write(f'{i},{label}\n')
-print(f"Saved sequence indices to {output_file_idx}")
+print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")

@@ -25,7 +25,8 @@ PARSER.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
 PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-
+PARSER.add_argument("--pooling", type=bool, nargs='*', default=True,
+                    help="Whether to pool the embeddings or not. Default is True.")
 ARGS = PARSER.parse_args()
 
 # Storing the input and output file paths
@@ -34,6 +35,10 @@ OUTPUT_FILE = ARGS.output_path
 CDR3_PATH = ARGS.cdr3_path
 CONTEXT = ARGS.context
 LAYERS = list(map(int, ARGS.layers[0].split()))
+if ARGS.pooling:
+    POOLING = ARGS.pooling
+else:
+    POOLING = False
 
 #debug values
 #FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/100k_sample_tz_heavy_chain.fa'
@@ -90,7 +95,7 @@ if CDR3_PATH:
 
 # TODO investigate missing_keys
 if CDR3_PATH:
-    missing_keys = [key for key in FASTA_SEQUENCES.keys() if key not in CDR3_DICT.keys()]
+    missing_keys = [key for key in FASTA_SEQUENCES if key not in CDR3_DICT]
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
@@ -150,11 +155,10 @@ with torch.no_grad():
             for counter, label in enumerate(labels):
                 sequence_labels.append(label)
                 for layer in LAYERS:
-                    mean_representation = (
-                        representations[layer][counter, 1: len(strs[counter]) + 1]
-                        .mean(0)
-                        .clone()
-                    )
+                    if POOLING:
+                        mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].mean(0).clone()
+                    else:
+                        mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].clone()
                     # We take mean_representation[0] to keep the [array] instead of [[array]].
                     mean_representations[layer].append(mean_representation)
         else:
@@ -199,13 +203,15 @@ for layer in LAYERS:
     mean_representations[layer] = torch.vstack(mean_representations[layer])
 
     output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
+    if not POOLING:
+        output_file_layer = output_file_layer.replace('.pt', '_full.pt')
     torch.save(mean_representations[layer], output_file_layer)
     print(f"Saved mean representations for layer {layer} to {output_file_layer}")
 
 # Save sequence labels to a csv file
-output_file_idx = OUTPUT_FILE.replace('.pt', '_idx.csv')
-with open(output_file_idx, 'w') as f:
+OUTPUT_FILE_IDX = OUTPUT_FILE.replace('.pt', '_idx.csv')
+with open(OUTPUT_FILE_IDX, 'w') as f:
     f.write('index,sequence_id\n')
     for i, label in enumerate(sequence_labels):
         f.write(f'{i},{label}\n')
-print(f"Saved sequence indices to {output_file_idx}")
+print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")
