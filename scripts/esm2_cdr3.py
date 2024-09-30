@@ -20,7 +20,7 @@ PARSER = argparse.ArgumentParser(description="Input path")
 PARSER.add_argument("--fasta_path", type=str, required=True,
                     help="Fasta path + filename.fa")
 PARSER.add_argument("--output_path", type=str, required=True,
-                    help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'.")
+                    help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'. Output file is a single tensor or a list of tensors when --pooling is False.")
 PARSER.add_argument("--cdr3_path", default = None, type=str,
                     help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
 PARSER.add_argument("--context", default = 0,type=int,
@@ -233,9 +233,3 @@ with open(OUTPUT_FILE_IDX, 'w') as f:
     for i, label in enumerate(sequence_labels):
         f.write(f'{i},{label}\n')
 print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")
-
-
-file = "data/embeddings/test_500_layer_33_full.pt"
-tensor_list = torch.load(file)
-
-tensor_list[1].shape
