@@ -1,3 +1,4 @@
+# pylint: disable=import-error
 """
 This script takes a fasta file as input and outputs a tensor of the mean representations of each sequence in the file using a pre-trained ESM-2 model.
 The tensor is saved as a PyTorch file.
@@ -8,10 +9,11 @@ Args:
 """
 import os
 import argparse
-import torch
-from esm import FastaBatchedDataset, pretrained
-from Bio import SeqIO
 import csv
+import torch
+from Bio import SeqIO
+from esm import FastaBatchedDataset, pretrained
+
 
 # Parsing command-line arguments for input and output file paths
 PARSER = argparse.ArgumentParser(description="Input path")
@@ -42,13 +44,13 @@ else:
 
 #debug values
 os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
-FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/test_500.fa'
-OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
-LAYERS = list(range(1,33 + 1))
+#FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/test_500.fa'
+#OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
+#LAYERS = list(range(1,33 + 1))
 #LAYERS = list(range(1,33 + 1))
 #CDR3_PATH = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/trastuzumab_cdr3_heavy.csv'
 #CONTEXT = None
-POOLING = False
+#POOLING = False
 
 # Check if output directory exists and creates it if it's missing
 if not os.path.exists(os.path.dirname(OUTPUT_FILE)):
