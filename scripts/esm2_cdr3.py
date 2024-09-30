@@ -218,11 +218,10 @@ print("Saving mean representations to output file...")
 
 # Save mean pooled representations for each layer to a separate file
 for layer in LAYERS:
-    # concattenate sequence labels to the tensor
-    mean_representations[layer] = torch.vstack(mean_representations[layer])
-
     output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
-    if not POOLING:
+    if POOLING:
+        mean_representations[layer] = torch.vstack(mean_representations[layer])
+    else:
         output_file_layer = output_file_layer.replace('.pt', '_full.pt')
     torch.save(mean_representations[layer], output_file_layer)
     print(f"Saved mean representations for layer {layer} to {output_file_layer}")
@@ -234,3 +233,9 @@ with open(OUTPUT_FILE_IDX, 'w') as f:
     for i, label in enumerate(sequence_labels):
         f.write(f'{i},{label}\n')
 print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")
+
+
+file = "data/embeddings/test_500_layer_33_full.pt"
+tensor_list = torch.load(file)
+
+tensor_list[1].shape

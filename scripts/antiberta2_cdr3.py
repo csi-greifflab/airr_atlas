@@ -211,11 +211,13 @@ torch.cuda.empty_cache()
 
 # Stacking representations of each layer into a single tensor and save to output file
 for layer in LAYERS:
-    MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
     OUTPUT_PATH_LAYER = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
-    if not POOLING:
+    if POOLING:
+        MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
+    else:
         OUTPUT_PATH_LAYER = OUTPUT_PATH_LAYER.replace('.pt', '_full.pt')
     torch.save(MEAN_REPRESENTATIONS[layer], OUTPUT_PATH_LAYER)
+    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
 
 OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
 with open(OUTPUT_FILE_IDX, 'w') as f:
