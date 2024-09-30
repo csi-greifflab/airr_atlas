@@ -116,7 +116,7 @@ if CDR3_PATH:
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
-TOKS_PER_BATCH = 50000 # works with Nvidia V100-32GB GPU
+TOKS_PER_BATCH = 8192 # works with Nvidia V100-32GB GPU
 
 # Loading the pretrained model and alphabet for tokenization
 print("Loading model...")
