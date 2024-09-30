@@ -30,7 +30,7 @@ PARSER.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
 PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-PARSER.add_argument("--pooling", type=bool, nargs='*', default=True,
+PARSER.add_argument('--pooling', type=lambda x: (str(x).lower() == 'true'), default=True,
                     help="Whether to pool the embeddings or not. Default is True.")
 args = PARSER.parse_args()
 
@@ -138,7 +138,7 @@ DATA_LOADER = DataLoader(DATASET, batch_size=BATCH_SIZE)
 
 # Initialize a list to store embeddings
 MEAN_REPRESENTATIONS = {layer: [] for layer in LAYERS}
-SEQUENCE_LABELS = []
+sequence_labels = []
 with torch.no_grad():
     TOTAL_BATCHES = len(DATA_LOADER)  # Correctly calculate the total number of batches here
 
@@ -153,7 +153,7 @@ with torch.no_grad():
         # TODO add optional argument to return mean pooled full embedding even if cdr3_path is specified
         if CDR3_PATH is None:
             # Append labels to SEQUENCE_LABELS
-            SEQUENCE_LABELS.extend(labels)
+            sequence_labels.extend(labels)
             for layer in LAYERS:
                 if POOLING:
                     MEAN_REPRESENTATIONS[layer].extend(
@@ -191,7 +191,7 @@ with torch.no_grad():
                     end = start + len(cdr3_sequence) + CONTEXT
                 except ValueError:
                     print("Context window too large")
-                SEQUENCE_LABELS.append(label)
+                sequence_labels.append(label)
 
                 for layer in LAYERS:
                     if POOLING:
@@ -220,6 +220,6 @@ for layer in LAYERS:
 OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
 with open(OUTPUT_FILE_IDX, 'w') as f:
     f.write('index,sequence_id\n')
-    for i, label in enumerate(SEQUENCE_LABELS):
+    for i, label in enumerate(sequence_labels):
         f.write(f'{i},{label}\n')
 print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")

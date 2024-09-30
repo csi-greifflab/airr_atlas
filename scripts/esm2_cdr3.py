@@ -27,11 +27,11 @@ PARSER.add_argument("--context", default = 0,type=int,
                     help="Number of amino acids to include before and after CDR3 sequence")
 PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
                     help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-PARSER.add_argument("--pooling", type=bool, nargs='*', default=True,
+PARSER.add_argument('--pooling', type=lambda x: (str(x).lower() == 'true'), default=True,
                     help="Whether to pool the embeddings or not. Default is True.")
 ARGS = PARSER.parse_args()
 
-# Storing the input and output file paths
+# Storing the input arguments in variables
 FASTA_FILE = ARGS.fasta_path
 OUTPUT_FILE = ARGS.output_path
 CDR3_PATH = ARGS.cdr3_path
@@ -41,6 +41,20 @@ if ARGS.pooling:
     POOLING = ARGS.pooling
 else:
     POOLING = False
+
+# Print summary of arguments
+print(f"FASTA file: {FASTA_FILE}")
+print(f"Output file: {OUTPUT_FILE}")
+if CDR3_PATH:
+    print(f"CDR3 file: {CDR3_PATH}")
+if CONTEXT:
+    print(f"Context: {CONTEXT}")
+print(f"Layers: {LAYERS}")
+print(f"Pooling: {POOLING}\n")
+
+
+
+
 
 #debug values
 os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
