@@ -47,7 +47,6 @@ else:
 
 ######## debug
 #import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
 #FASTA_PATH = '/doctorai/userdata/airr_atlas/data/sequences/wang/first_10.fasta'
 #OUTPUT_PATH = '/doctorai/userdata/airr_atlas/test/test_cdr3.pt'
@@ -71,7 +70,7 @@ def fasta_to_dict(fasta_file):
     seq_dict = {}
     with open(fasta_file) as f:
         for record in SeqIO.parse(f, 'fasta'):
-            seq_dict[record.id] = " ".join(str(record.seq)) # AA tokens for hugging face models must be gapped
+            seq_dict[record.id] = " ".join(str(record.seq)) # AA tokens for hugging face models must be space gapped
             # print progress
             if len(seq_dict) % 1000 == 0:
                 print(f'{len(seq_dict)} sequences loaded')
@@ -147,7 +146,7 @@ with torch.no_grad():
         labels = list(SEQUENCES.keys())[batch_idx * BATCH_SIZE : (batch_idx + 1) * BATCH_SIZE]
         INPUT_IDS, attention_mask = [b.to(DEVICE, non_blocking=True) for b in batch]
         
-        outputs = MODEL(input_ids=INPUT_IDS, attention_mask=attention_mask, output_hidden_states = True)
+        outputs = MODEL(input_ids=INPUT_IDS, attention_mask=attention_mask, output_hidden_states=True)
         # Extracting layer representations and moving them to CPU
         representations = {layer: outputs.hidden_states[layer].to(device="cpu") for layer in LAYERS}
         
@@ -214,7 +213,7 @@ torch.cuda.empty_cache()
 for layer in LAYERS:
     MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
     OUTPUT_PATH_LAYER = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
-    if POOLING:
+    if not POOLING:
         OUTPUT_PATH_LAYER = OUTPUT_PATH_LAYER.replace('.pt', '_full.pt')
     torch.save(MEAN_REPRESENTATIONS[layer], OUTPUT_PATH_LAYER)
 
