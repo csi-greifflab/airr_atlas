@@ -41,13 +41,14 @@ else:
     POOLING = False
 
 #debug values
-#FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/100k_sample_tz_heavy_chain.fa'
-#FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/wang_H_full_chains.fa'
-#OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
-#LAYERS = list(range(1,33 + 1))
+os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
+FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/test_500.fa'
+OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
+LAYERS = list(range(1,33 + 1))
 #LAYERS = list(range(1,33 + 1))
 #CDR3_PATH = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/trastuzumab_cdr3_heavy.csv'
 #CONTEXT = None
+POOLING = False
 
 # Check if output directory exists and creates it if it's missing
 if not os.path.exists(os.path.dirname(OUTPUT_FILE)):
@@ -99,7 +100,7 @@ if CDR3_PATH:
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
-TOKS_PER_BATCH = 4096
+TOKS_PER_BATCH = 50000 # works with Nvidia V100-32GB GPU
 
 # Loading the pretrained model and alphabet for tokenization
 print("Loading model...")
@@ -185,11 +186,13 @@ with torch.no_grad():
                 end = start + len(cdr3_sequence) + CONTEXT
                 sequence_labels.append(label)
                 for layer in LAYERS:
-                    mean_representation = representations[layer][i, start : end].mean(0).clone()
+                    if POOLING:
+                        mean_representation = representations[layer][i, start : end].mean(0).clone()
+                    else:
+                        mean_representation = representations[layer][i, start : end].clone()
                     # We take mean_representation[0] to keep the [array] instead of [[array]].
                     mean_representations[layer].append(mean_representation)
 print('Finished processing sequences')
-
 # Clear GPU memory
 print("Clearing GPU memory...")
 torch.cuda.empty_cache()
