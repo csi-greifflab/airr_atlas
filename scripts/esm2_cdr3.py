@@ -1,11 +1,28 @@
-# pylint: disable=import-error
 """
-This script takes a fasta file as input and outputs a tensor of the mean representations of each sequence in the file using a pre-trained ESM-2 model.
-The tensor is saved as a PyTorch file.
+This script processes amino acid sequences from a FASTA file and computes their mean representations using a pre-trained ESM-2 model. The mean representations can be pooled or unpooled and saved to an output file. Optionally, the script can also compute embeddings for specific CDR3 sequences within the amino acid sequences.
 
-Args:
-    fasta_path (str): Path to the fasta file.
-    output_path (str): Path to save the output tensor.
+Usage:
+    python esm2_cdr3.py --fasta_path <path_to_fasta_file> --output_path <path_to_output_file> [--cdr3_path <path_to_cdr3_csv>] [--context <context_length>] [--layers <layers>] [--pooling <True/False>]
+
+Arguments:
+    --fasta_path (str): Path to the input FASTA file containing amino acid sequences.
+    --output_path (str): Path to the output file where embeddings will be saved. Multiple files will be created if multiple layers are specified with '--layers'.
+    --cdr3_path (str, optional): Path to the CSV file containing CDR3 sequences. Required if calculating CDR3 sequence embeddings.
+    --context (int, optional): Number of amino acids to include before and after the CDR3 sequence. Default is 0.
+    --layers (str, optional): Representation layers to extract from the model. Default is the last layer. Example: '--layers -1 6' will output the last layer and the sixth layer.
+    --pooling (bool, optional): Whether to pool the embeddings or not. Default is True.
+
+Example:
+    python esm2_cdr3.py --fasta_path sequences.fasta --output_path embeddings.pt --cdr3_path cdr3.csv --context 5 --layers -1 6 --pooling True
+
+Dependencies:
+    - os
+    - csv
+    - argparse
+    - Bio (Biopython)
+    - torch
+    - esm (Facebook Research)
+    - torch.utils.data (PyTorch)
 """
 import os
 import argparse
@@ -198,8 +215,8 @@ with torch.no_grad():
                 cdr3_sequence = cdr3_sequence.replace('-', '')
 
                 # get position of cdr3_sequence in sequence
-                start = full_sequence.find(cdr3_sequence) - CONTEXT
-                end = start + len(cdr3_sequence) + CONTEXT
+                start = max(full_sequence.find(cdr3_sequence) - CONTEXT, 0)
+                end = max(start + len(cdr3_sequence) + CONTEXT, len(full_sequence))
                 sequence_labels.append(label)
                 for layer in LAYERS:
                     if POOLING:
@@ -218,7 +235,10 @@ print("Saving mean representations to output file...")
 
 # Save mean pooled representations for each layer to a separate file
 for layer in LAYERS:
-    output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
+    if CONTEXT:
+        output_file_layer = OUTPUT_FILE.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
+    else:
+        output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
     if POOLING:
         mean_representations[layer] = torch.vstack(mean_representations[layer])
     else:

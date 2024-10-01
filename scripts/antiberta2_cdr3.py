@@ -1,11 +1,30 @@
 """
-This script takes a fasta file as input and outputs a tensor of the mean representations of each sequence in the file using a pre-trained ESM-2 model.
-The tensor is saved as a PyTorch file.
+This script processes amino acid sequences from a FASTA file and computes their embeddings using the RoFormer model from Hugging Face's Transformers library. The embeddings can be pooled or unpooled and saved to an output file. Optionally, the script can also compute embeddings for specific CDR3 sequences within the amino acid sequences.
 
-Args:
-    fasta_path (str): Path to the fasta file.
-    output_path (str): Path to save the output tensor.
+Usage:
+    python antiberta2_cdr3.py --fasta_path <path_to_fasta_file> --output_path <path_to_output_file> [--cdr3_path <path_to_cdr3_csv>] [--context <context_length>] [--layers <layers>] [--pooling <True/False>]
+
+Arguments:
+    --fasta_path (str): Path to the input FASTA file containing amino acid sequences.
+    --output_path (str): Path to the output file where embeddings will be saved. Multiple files will be created if multiple layers are specified with '--layers'.
+    --cdr3_path (str, optional): Path to the CSV file containing CDR3 sequences. Required if calculating CDR3 sequence embeddings.
+    --context (int, optional): Number of amino acids to include before and after the CDR3 sequence. Default is 0.
+    --layers (str, optional): Representation layers to extract from the model. Default is the last layer. Example: '--layers -1 6' will output the last layer and the sixth layer.
+    --pooling (bool, optional): Whether to pool the embeddings or not. Default is True.
+
+Example:
+    python antiberta2_cdr3.py --fasta_path sequences.fasta --output_path embeddings.pt --cdr3_path cdr3.csv --context 5 --layers -1 6 --pooling True
+
+Dependencies:
+    - os
+    - csv
+    - argparse
+    - Bio (Biopython)
+    - torch
+    - transformers (Hugging Face)
+    - torch.utils.data (PyTorch)
 """
+
 import os
 import csv
 import argparse
@@ -57,15 +76,6 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
 
 # convert fasta into dictionary
 def fasta_to_dict(fasta_file):
-    """
-    Convert a fasta file into a dictionary.
-
-    Args:
-        fasta_file (str): Path to the fasta file.
-
-    Returns:
-        dict: A dictionary where the keys are the sequence IDs and the values are the sequences.
-    """
     print('Loading and batching input sequences...')
     seq_dict = {}
     with open(fasta_file) as f:
@@ -183,14 +193,8 @@ with torch.no_grad():
                 cdr3_sequence = cdr3_sequence.replace('-', '')
 
                 # get position of cdr3_sequence in sequence
-                try:
-                    start = full_sequence.find(cdr3_sequence) - CONTEXT
-                except ValueError:
-                    print("Context window too large")
-                try:
-                    end = start + len(cdr3_sequence) + CONTEXT
-                except ValueError:
-                    print("Context window too large")
+                start = max(full_sequence.find(cdr3_sequence) - CONTEXT, 0)
+                end = max(start + len(cdr3_sequence) + CONTEXT, len(full_sequence))
                 sequence_labels.append(label)
 
                 for layer in LAYERS:
@@ -211,13 +215,16 @@ torch.cuda.empty_cache()
 
 # Stacking representations of each layer into a single tensor and save to output file
 for layer in LAYERS:
-    OUTPUT_PATH_LAYER = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
+    if CONTEXT:
+        output_file_layer = OUTPUT_PATH.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
+    else:
+        output_file_layer = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
     if POOLING:
         MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
     else:
-        OUTPUT_PATH_LAYER = OUTPUT_PATH_LAYER.replace('.pt', '_full.pt')
-    torch.save(MEAN_REPRESENTATIONS[layer], OUTPUT_PATH_LAYER)
-    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
+        output_path_layer = output_path_layer.replace('.pt', '_full.pt')
+    torch.save(MEAN_REPRESENTATIONS[layer], output_path_layer)
+    print(f"Saved mean representations for layer {layer} to {output_path_layer}")
 
 OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
 with open(OUTPUT_FILE_IDX, 'w') as f:
