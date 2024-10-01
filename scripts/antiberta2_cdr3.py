@@ -66,7 +66,7 @@ else:
 
 ######## debug
 #import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
 #FASTA_PATH = '/doctorai/userdata/airr_atlas/data/sequences/wang/first_10.fasta'
 #OUTPUT_PATH = '/doctorai/userdata/airr_atlas/test/test_cdr3.pt'
 #CDR3_PATH = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab_heavy_chains/trastuzumab_heavy_chains_cdr3.csv'

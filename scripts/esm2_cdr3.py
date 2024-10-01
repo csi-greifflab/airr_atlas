@@ -74,7 +74,7 @@ print(f"Pooling: {POOLING}\n")
 
 
 #debug values
-os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
 #FASTA_FILE = '/doctorai/userdata/airr_atlas/data/sequences/test_500.fa'
 #OUTPUT_FILE = '/doctorai/userdata/airr_atlas/embedding/test/test_cdr3.pt'
 #LAYERS = list(range(1,33 + 1))
