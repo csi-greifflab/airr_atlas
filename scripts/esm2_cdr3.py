@@ -50,7 +50,7 @@ ARGS = PARSER.parse_args()
 
 # Storing the input arguments in variables
 FASTA_FILE = ARGS.fasta_path
-OUTPUT_FILE = ARGS.output_path
+OUTPUT_PATH = ARGS.output_path
 CDR3_PATH = ARGS.cdr3_path
 CONTEXT = ARGS.context
 LAYERS = list(map(int, ARGS.layers[0].split()))
@@ -61,7 +61,7 @@ else:
 
 # Print summary of arguments
 print(f"FASTA file: {FASTA_FILE}")
-print(f"Output file: {OUTPUT_FILE}")
+print(f"Output file: {OUTPUT_PATH}")
 if CDR3_PATH:
     print(f"CDR3 file: {CDR3_PATH}")
 if CONTEXT:
@@ -84,11 +84,11 @@ print(f"Pooling: {POOLING}\n")
 #POOLING = False
 
 # Check if output directory exists and creates it if it's missing
-if not os.path.exists(os.path.dirname(OUTPUT_FILE)):
+if not os.path.exists(os.path.dirname(OUTPUT_PATH)):
 
     # if the demo_folder directory is not present  
     # then create it. 
-    os.makedirs(os.path.dirname(OUTPUT_FILE))
+    os.makedirs(os.path.dirname(OUTPUT_PATH))
 # Load cdr3 sequences and store in dictionary
 if CDR3_PATH:
     with open(CDR3_PATH) as f:
@@ -236,9 +236,9 @@ print("Saving mean representations to output file...")
 # Save mean pooled representations for each layer to a separate file
 for layer in LAYERS:
     if CONTEXT:
-        output_file_layer = OUTPUT_FILE.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
+        output_file_layer = OUTPUT_PATH.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
     else:
-        output_file_layer = OUTPUT_FILE.replace('.pt', f'_layer_{layer}.pt')
+        output_file_layer = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
     if POOLING:
         mean_representations[layer] = torch.vstack(mean_representations[layer])
     else:
@@ -247,7 +247,7 @@ for layer in LAYERS:
     print(f"Saved mean representations for layer {layer} to {output_file_layer}")
 
 # Save sequence labels to a csv file
-OUTPUT_FILE_IDX = OUTPUT_FILE.replace('.pt', '_idx.csv')
+OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
 with open(OUTPUT_FILE_IDX, 'w') as f:
     f.write('index,sequence_id\n')
     for i, label in enumerate(sequence_labels):

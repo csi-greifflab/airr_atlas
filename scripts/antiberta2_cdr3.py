@@ -222,9 +222,9 @@ for layer in LAYERS:
     if POOLING:
         MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
     else:
-        output_path_layer = output_path_layer.replace('.pt', '_full.pt')
-    torch.save(MEAN_REPRESENTATIONS[layer], output_path_layer)
-    print(f"Saved mean representations for layer {layer} to {output_path_layer}")
+        output_file_layer = output_file_layer.replace('.pt', '_full.pt')
+    torch.save(MEAN_REPRESENTATIONS[layer], output_file_layer)
+    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
 
 OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
 with open(OUTPUT_FILE_IDX, 'w') as f:
