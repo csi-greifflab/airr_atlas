@@ -31,42 +31,91 @@ from libpysal.weights import W
 
 import argparse
 from sklearn.preprocessing import scale
+# TODO look for LD to total TZ dataset
+# Simulate command-line arguments for debugging
+# sys.argv = [
+#     'Vicinity_pipeline.py',  # Script name (first argument in sys.argv)
+#     '--analysis_name', 'VH_ab2_attMat_ALL_layer1_cosine_v7',
+#     '--input_metadata', '/doctorai/niccoloc/tz_metadata_60k.csv',
+#     '--input_embeddings', '/doctorai/niccoloc/attention_matrices_flat_avg_ALL_ab2.pt',
+#     '--save_results',
+#     '--radius_range', '0,6,0.2',
+#     '--plot_results',
+#     '--df_junction_colname', 'junction_aa',
+#     '--df_affinity_colname', 'affinity',
+#     '--sample_size', '0',
+#     '--chosen_metric', 'cosine',
+#     '--compute_LD'
+# ]
+# 
+# 
+# sys.argv = [
+#     'Vicinity_pipeline.py' ,
+#     '--analysis_name' ,'WHOLE_LD' ,
+#     '--input_metadata' ,'/doctorai/niccoloc/trastuzumab_metadata.csv' ,
+#     '--input_embeddings' ,'/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab/antiberta2/cdr3_only/100k_sample_trastuzmab_cdr3_heavy_only_antiberta2_layer_16.pt' ,
+#     '--input_idx' , '/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/100k_sample_trastuzmab_antiberta2_idx.csv',
+#     '--compute_LD' ,
+#     '--save_results'  ,
+#     '--plot_results'  ,
+#     '--sample_size', '4000' ,
+#     '--LD_sample_size', '530000',
+# ]    
+# 
+# 
+# 
+# 
+
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process input parameters.')
     parser.add_argument('--analysis_name', type=str, required=True, help='Name of the analysis')
     parser.add_argument('--df_junction_colname', type=str, default='junction_aa', help='Column name for junction aa')
     parser.add_argument('--df_affinity_colname', type=str, default='affinity', help='Column name for affinity')
+    parser.add_argument('--input_idx', type=str, default='', help='File containing the corrispondence between the embeddings index and the metadata id')
     parser.add_argument('--input_metadata', type=str, required=True, help='Path to input metadata CSV file')
     parser.add_argument('--input_embeddings', type=str, required=True, help='Path to input embeddings file')
     parser.add_argument('--result_dir', type=str, default='./Vicinity_results', help='parent directory of results')
-    parser.add_argument('--save_results', type=bool, default=True, help='Flag to save results (True/False)')
-    parser.add_argument('--compute_LD', type=bool, default=False, help='Flag to compute LD (True/False)')
-    parser.add_argument('--plot_results', type=bool, default=True, help='Flag to generate plots (True/False)')
+    parser.add_argument('--save_results', action='store_true', help='Flag to save results')
+    parser.add_argument('--compute_LD', action='store_true', help='Flag to compute LD')
+    parser.add_argument('--plot_results', action='store_true', help='Flag to generate plots')
+    parser.add_argument('--parallel', action='store_true', help='parallelize KNN search , suggested to use with more than 500k seqs')
     parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='euclidean', help='Metric to use')
     parser.add_argument('--sample_size', type=int, default= 0 , help='Size of the max sample of each label')
-    parser.add_argument('--LD_sample_size', type=int, default= 5000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
+    parser.add_argument('--LD_sample_size', type=int, default= 10000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
     parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results')
-    parser.add_argument("--radius_range", type=str, default="7,24", help="Specify the min and max radius separated by a comma (e.g., '7,24')")
+    parser.add_argument("--radius_range", type=str, default="7,24,1", help="Specify the min and max radius and steps separated by a comma (e.g., '7,24,1')")
     return parser.parse_args()
 
 
-def load_data(input_metadata, input_embeddings):
+def load_data(input_metadata, input_embeddings,idx_reference):
     if not os.path.exists(input_metadata):
         raise FileNotFoundError(f"Metadata file not found: {input_metadata}")
     if not os.path.exists(input_embeddings):
         raise FileNotFoundError(f"Embeddings file not found: {input_embeddings}")
     
+    tensors = torch.load(input_embeddings).numpy()    
     seqs = pd.read_csv(input_metadata, sep=None)
-    seqs['id'] = np.arange(0, len(seqs))
-    tensors = torch.load(input_embeddings).numpy()
-    tensors_df = pd.DataFrame({
-        'id': np.arange(0, len(tensors)),
-        'embedding': list(tensors)
-    })
-    df = pd.merge(seqs, tensors_df, on='id')
+    if idx_reference == "":
+        seqs['id'] = np.arange(0, len(seqs))
+        tensors_df = pd.DataFrame({
+            'id': np.arange(0, len(tensors)),
+            'embedding': list(tensors)
+        })
+        df = pd.merge(seqs, tensors_df, on='id')
+    else:
+        #'/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_idx.csv'
+        #'/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv'
+        idx_df= pd.read_csv(idx_reference, sep =None)
+        tensors_df = pd.DataFrame({
+            'tensor_id': idx_df['index'],
+            'sequence_id' : idx_df['sequence_id'],
+            'embedding': list(tensors)
+        })
+        df = pd.merge(seqs, tensors_df, on='sequence_id')
     print("...Removing duplicated sequences ...")
-    df = df[~df['junction_aa'].duplicated(keep=False)]
+    df = df[~df[args.df_junction_colname].duplicated(keep=False)]
     df = df.reset_index(drop=True)
     df['id'] = np.arange(0, len(df))
     return df
@@ -86,7 +135,6 @@ def filter_data(df, max_junction_length=40, sample_size=10000, rand_seed=123, ju
     except KeyError:
         print("Error: No junction aa has been provided, or the colname is wrong")
         return pd.DataFrame()
-
     unique_labels = df[affinity_col].unique()
     affinity_dfs = {}
     for label in unique_labels:
@@ -104,12 +152,15 @@ analysis_name = args.analysis_name
 result_folder= os.path.join( args.result_dir, f"{analysis_name}/")
 df_junction_colname= args.df_junction_colname
 df_affinity_colname= args.df_affinity_colname
+idx_reference=args.input_idx
 chosen_metric = args.chosen_metric
+parallel_choice =args.parallel
 
 try:
-  min_radius, max_radius = map(int, args.radius_range.split(','))
-  ED_radius = range(min_radius, max_radius )
-  print("Euclidean distance radius range:", list(ED_radius))
+  min_radius, max_radius, step = float(args.radius_range.split(',')[0]), float(args.radius_range.split(',')[1]), float(args.radius_range.split(',')[2])
+  #ED_radius = range(min_radius, max_radius )
+  ED_radius= np.arange(min_radius, max_radius, step)
+  print("Euclidean distance radius range and steps:", list(ED_radius))
 except ValueError:
   print("Error: Please ensure you provide two integers separated by a comma for the radius range.")
 
@@ -118,7 +169,7 @@ print(f" this is the result folder {result_folder}")
 
 create_result_folder(result_folder)
 
-df = load_data(args.input_metadata, args.input_embeddings)
+df = load_data(args.input_metadata, args.input_embeddings, idx_reference)
 id_index_sample = df['id']
 
 if args.sample_size != 0 :
@@ -137,6 +188,7 @@ part1 = np.arange(2, 304, 4)  # check in detail first 300 NN
 part2 = np.arange(350, max_neighbors+1, 50)  # Second part: numbers from 300 to 1000 with steps of 50
 neighbor_numbers = np.concatenate((part1, part2))
 
+#neighbor_numbers = np.arange(2, 30, 4) #for debug purposes
 
 #KNN vicinity
 vicinity_analysis_instance = Vicinity_analysis(df,
@@ -144,14 +196,15 @@ vicinity_analysis_instance = Vicinity_analysis(df,
                                                 id_index_sample,
                                                 colname_affinity=df_affinity_colname,
                                                 colname_junction=df_junction_colname,
-                                                metric= chosen_metric)
+                                                metric= chosen_metric,
+                                                parallel= parallel_choice)
 vicinity_analysis_instance.run_analysis()  # This populates the necessary attributes
 vicinity_analysis_instance.label_results
 
-#ED radius vicinity --- # TODO : implement a better way of defining Custom distance radius thresholds
-#ED_radius = range(7, 25)  # Define your Euclidian distance radius to check -- should work for AB2
+#ED_radius = range(7, 25)  # Define your Euclidia12
+#n distance radius to check -- should work for AB2
 if chosen_metric == "cosine":
-    ED_radius= np.arange(0,0.3,0.01)
+    ED_radius= np.arange(0,0.01,0.001)
 
 print(ED_radius)
 percentages_results, res_df, mean_num_points, LD1_res, LD2_res = vicinity_analysis_instance.perc_Euclidian_radius(ED_radius)
@@ -168,6 +221,7 @@ if args.save_results:
 np.random.seed(123)
 #function to sample the max numb of sequences if they are below the chosen sample size
 def sample_affinities(df, sample_size, df_affinity_colname ='affinity'):
+    np.random.seed(123)
     df['affinity']=df[df_affinity_colname]
     # Check the maximum available samples for each affinity
     count_per_affinity = df['affinity'].value_counts()
@@ -182,11 +236,13 @@ def sample_affinities(df, sample_size, df_affinity_colname ='affinity'):
     return df.loc[sampled_indices]
 
 chosen_sample_size=  args.LD_sample_size
+# chosen_sample_size=  50000 #debug
 LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{chosen_sample_size//1000}k.csv"
-if args.compute_LD== True:
-    rand_100k=sample_affinities(df, chosen_sample_size, df_affinity_colname).index
+if args.compute_LD == True:
+    print('LD computing...')
+    rand_100k=sample_affinities(pd.read_csv(args.input_metadata, sep=None), chosen_sample_size, df_affinity_colname).index
     max_LD=5
-    d_res1,d_mean1 = prepare_data_for_plotting( df,max_LD, sampled_indices=rand_100k) # to get VICINITY percentages of LD dist 
+    d_res1,d_mean1 = prepare_data_for_plotting( pd.read_csv(args.input_metadata, sep=None),max_LD, sampled_indices=rand_100k) # to get VICINITY percentages of LD dist 
     #( for i in sampled_indices --> LD calculation  i vs ALL)
     #save_to_pickle(d_mean1, LD_filename)
     d_mean1.to_csv(LD_filename)

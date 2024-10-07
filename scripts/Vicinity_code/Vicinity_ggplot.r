@@ -27,10 +27,9 @@ ED_input <- args[1]
 LD_input <- args[2]
 output_path <- args[3]
 
-
-# ED_input='/doctorai/niccoloc/Vicinity_results/Tz_cosine/summary_results_ED_Tz_cosine.csv'
-# LD_input ='/doctorai/niccoloc/Vicinity_results/Tz/d_mean1_summary_LD_Tz_5k.csv'
-
+# 
+# ED_input='/doctorai/niccoloc/airr_atlas_bk/Vicinity_results/Tz_cosine/summary_results_ED_Tz_cosine.csv'
+# LD_input ='/doctorai/niccoloc/airr_atlas_bk/Vicinity_results/Tz/d_mean1_summary_LD_Tz_10k.csv'
 
 
 #tmp_ed_sum<- fread("summary_results_ED_AG_SPEC.csv")[,-1] %>% as.data.frame()
@@ -78,26 +77,37 @@ p_avg<-ggplot()+
 # --------------------------PERC NULL --------------------------------
 
 
-df_LD=bind_cols(
+df_LD_NULL=bind_cols(
   tidyr::pivot_longer(LD_perc,starts_with("Perc"), values_to = "Vicinity"),
   tidyr::pivot_longer(LD_NULL_perc,starts_with("Avg_NaN"), values_to = "NULL_p")[,-1]
 ) 
-df_ED=bind_cols(
+df_ED_NULL=bind_cols(
   tidyr::pivot_longer(ED_perc,starts_with("Perc"), values_to = "Vicinity", names_to="affinity"),
   tidyr::pivot_longer(ED_NULL_perc,starts_with("NULL"), values_to = "NULL_p" )[,-1]
 )  %>% mutate(affinity= str_remove(affinity, "Perc_"))
 
 
 p_null<-ggplot()+
-  geom_point(data=df_LD, aes(NULL_p,Vicinity, ), color= "red", shape=1, size=1)+
-  geom_point(data=df_ED, aes(NULL_p,Vicinity, ),color= "blue",  shape=1, size=1)+
-  geom_text_repel(data=df_ED, aes(NULL_p,Vicinity, label= thr ),min.segment.length = 0, max.overlaps = 5, force_pull = 10)+
-  geom_line(data=df_LD, aes(NULL_p,Vicinity, ),color= "red",  shape=4 , size=1, alpha=0.5)+ 
-  geom_line(data=df_ED, aes(NULL_p,Vicinity, ),color= "blue",  shape=4 , size=1, alpha=0.5)+
+  geom_point(data=df_LD_NULL, aes(NULL_p,Vicinity, ), color= "red", shape=1, size=1)+
+  geom_point(data=df_ED_NULL, aes(NULL_p,Vicinity, ),color= "blue",  shape=1, size=1)+
+  geom_text_repel(data=df_ED_NULL, aes(NULL_p,Vicinity, label= thr ),min.segment.length = 0, max.overlaps = 5, force_pull = 10)+
+  geom_line(data=df_LD_NULL, aes(NULL_p,Vicinity, ),color= "red",  shape=4 , linewidth=1, alpha=0.5)+ 
+  geom_line(data=df_ED_NULL, aes(NULL_p,Vicinity, ),color= "blue",  shape=4 , linewidth=1, alpha=0.5)+
   facet_wrap(vars(affinity), scales = "free_x")+
   theme_bw()
 
-
+# bind_rows(
+#   df_ED %>% left_join(df_ED_NULL ,by=c('thr','affinity','Vicinity')) %>% mutate(metric ='ED'),
+#   df_LD %>% left_join(df_LD_NULL ,by=c('affinity','name...2','Vicinity')) %>% mutate(metric ='LD') ) %>% 
+#   filter(!is.na(Vicinity)) %>% 
+#   
+#   mutate(Loneliness = (1- (NULL_p/100))) %>% 
+#   mutate(Vicinity_corr = Vicinity * Loneliness) %>% View()
+#   ggplot(.)+
+#   geom_point( aes(AvgNN,Vicinity_corr, color = metric),  shape=1, size=1)+
+#   geom_line( aes(AvgNN,Vicinity_corr, color = metric),   shape=4 , linewidth=1, alpha=0.5)+ 
+#   facet_wrap(vars(affinity), scales = "free_x")+
+#   theme_bw()
 
 #output_path="./Ag_whole"
 print(output_path)
@@ -105,6 +115,7 @@ dir.create(output_path)
 title1=str_c(output_path,"/vicinity_avgNN.jpeg")
 title2=str_c(output_path,"/vicinity_NULL.jpeg")
 
+fwrite(df_LD,str_c(output_path,"/LD_plot_input.tsv"))
 print(title1)
 title2
 

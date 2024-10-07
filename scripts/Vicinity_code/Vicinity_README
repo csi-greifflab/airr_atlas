@@ -1,8 +1,29 @@
 # Check in the Vicinity_ggplot.r that the libraries you installed are from the correct folder location!
-#for more info about each argument , check the vicinity_pipeline.py code
+#for more info about each argument , check below ( directly from vicinity_pipeline.py code )
+
+# def parse_arguments():
+#     parser = argparse.ArgumentParser(description='Process input parameters.')
+#     parser.add_argument('--analysis_name', type=str, required=True, help='Name of the analysis')
+#     parser.add_argument('--df_junction_colname', type=str, default='junction_aa', help='Column name for junction aa')
+#     parser.add_argument('--df_affinity_colname', type=str, default='affinity', help='Column name for affinity')
+#     parser.add_argument('--input_idx', type=str, default='', help='File containing the corrispondence between the embeddings index and the metadata id')
+#     parser.add_argument('--input_metadata', type=str, required=True, help='Path to input metadata CSV file')
+#     parser.add_argument('--input_embeddings', type=str, required=True, help='Path to input embeddings file')
+#     parser.add_argument('--result_dir', type=str, default='./Vicinity_results', help='parent directory of results')
+#     parser.add_argument('--save_results', action='store_true', help='Flag to save results')
+#     parser.add_argument('--compute_LD', action='store_true', help='Flag to compute LD')
+#     parser.add_argument('--plot_results', action='store_true', help='Flag to generate plots')
+#     parser.add_argument('--parallel', action='store_true', help='parallelize KNN search , suggested to use with more than 500k seqs')
+#     parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='euclidean', help='Metric to use')
+#     parser.add_argument('--sample_size', type=int, default= 0 , help='Size of the max sample of each label')
+#     parser.add_argument('--LD_sample_size', type=int, default= 10000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
+#     parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results')
+#     parser.add_argument("--radius_range", type=str, default="7,24,1", help="Specify the min and max radius and steps separated by a comma (e.g., '7,24,1')")
+#     return parser.parse_args()
+
 
 python Vicinity_pipeline.py \
-    --analysis_name try_sep \
+    --analysis_name WHOLE_LD \
     --input_metadata /doctorai/niccoloc/merged_df_may_2024_preprocessed_V2.csv \
     --input_embeddings /doctorai/evgeniie/AIRR_atlas_2023/output/antiberta_merged_df_may_preprocessed.pt \
     --precomputed_LD /doctorai/niccoloc/d_mean1_summary_LD_Ag_spec_whole_0k.csv \
@@ -13,6 +34,51 @@ python Vicinity_pipeline.py \
     --df_affinity_colname specificity \
     --sample_size 1100 \
     --LD_sample_size 100
+    
+python Vicinity_pipeline.py \
+    --analysis_name WHOLE_LD \
+    --input_metadata /doctorai/niccoloc/trastuzumab_metadata.csv \
+    --input_embeddings /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/cdr3_only/100k_sample_trastuzmab_cdr3_heavy_only_antiberta2_layer_16.pt \
+    --compute_LD \
+    --save_results  \
+    --plot_results  \
+    --sample_size 4000 \
+    --LD_sample_size 530000
+    
+
+
+        #'/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_idx.csv'
+        #'/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv'
+
+python Vicinity_pipeline.py \
+    --analysis_name only_LD \
+    --input_metadata /doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv \
+    --input_embeddings /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_layer_16.pt \
+    --input_idx  /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/cdr3_pooled/100k_sample_trastuzmab_cdr3_heavy_antiberta2_idx.csv \
+    --save_results True \
+    --compute_LD True \
+    --plot_results True \
+    --df_junction_colname cdr3_aa \
+    --df_affinity_colname binding_label \
+    --sample_size 1100 \
+    --LD_sample_size 10000
+
+
+python Vicinity_pipeline.py \
+    --analysis_name VH_ab2_lay16 \
+    --input_metadata /doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv \
+    --input_embeddings /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_layer_16.pt \
+    --input_idx  /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/cdr3_pooled/100k_sample_trastuzmab_cdr3_heavy_antiberta2_idx.csv \
+    --save_results True \
+    --compute_LD False \
+    --plot_results True \
+    --df_junction_colname cdr3_aa \
+    --df_affinity_colname binding_label \
+    --sample_size 0 \
+    --precomputed_LD /doctorai/niccoloc/airr_atlas/scripts/Vicinity_code/
+
+
+
 
 
 python Vicinity_pipeline.py \
