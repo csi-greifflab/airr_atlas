@@ -31,45 +31,27 @@ import torch
 from Bio import SeqIO
 from esm import FastaBatchedDataset, pretrained
 
+# Constants
+MODEL_NAME = "esm2_t33_650M_UR50D"
+BATCH_SIZE = 8192 # works with Nvidia V100-32GB GPU
 
 # Parsing command-line arguments for input and output file paths
-PARSER = argparse.ArgumentParser(description="Input path")
-PARSER.add_argument("--fasta_path", type=str, required=True,
-                    help="Fasta path + filename.fa")
-PARSER.add_argument("--output_path", type=str, required=True,
-                    help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'. Output file is a single tensor or a list of tensors when --pooling is False.")
-PARSER.add_argument("--cdr3_path", default = None, type=str,
-                    help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
-PARSER.add_argument("--context", default = 0,type=int,
-                    help="Number of amino acids to include before and after CDR3 sequence")
-PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
-                    help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-PARSER.add_argument('--pooling', type=lambda x: (str(x).lower() == 'true'), default=True,
-                    help="Whether to pool the embeddings or not. Default is True.")
-ARGS = PARSER.parse_args()
-
-# Storing the input arguments in variables
-FASTA_FILE = ARGS.fasta_path
-OUTPUT_PATH = ARGS.output_path
-CDR3_PATH = ARGS.cdr3_path
-CONTEXT = ARGS.context
-LAYERS = list(map(int, ARGS.layers[0].split()))
-if ARGS.pooling:
-    POOLING = ARGS.pooling
-else:
-    POOLING = False
-
-# Print summary of arguments
-print(f"FASTA file: {FASTA_FILE}")
-print(f"Output file: {OUTPUT_PATH}")
-if CDR3_PATH:
-    print(f"CDR3 file: {CDR3_PATH}")
-if CONTEXT:
-    print(f"Context: {CONTEXT}")
-print(f"Layers: {LAYERS}")
-print(f"Pooling: {POOLING}\n")
-
-
+def parse_arguments():
+    """Parse command-line arguments for input and output file paths."""
+    PARSER = argparse.ArgumentParser(description="Input path")
+    PARSER.add_argument("--fasta_path", type=str, required=True,
+                        help="Fasta path + filename.fa")
+    PARSER.add_argument("--output_path", type=str, required=True,
+                        help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'. Output file is a single tensor or a list of tensors when --pooling is False.")
+    PARSER.add_argument("--cdr3_path", default = None, type=str,
+                        help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
+    PARSER.add_argument("--context", default = 0,type=int,
+                        help="Number of amino acids to include before and after CDR3 sequence")
+    PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
+                        help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
+    PARSER.add_argument('--pooling', type=lambda x: (str(x).lower() == 'true'), default=True,
+                        help="Whether to pool the embeddings or not. Default is True.")
+    return PARSER.parse_args()
 
 
 
@@ -83,173 +65,189 @@ print(f"Pooling: {POOLING}\n")
 #CONTEXT = None
 #POOLING = False
 
-# Check if output directory exists and creates it if it's missing
-if not os.path.exists(os.path.dirname(OUTPUT_PATH)):
-
-    # if the demo_folder directory is not present  
-    # then create it. 
-    os.makedirs(os.path.dirname(OUTPUT_PATH))
-# Load cdr3 sequences and store in dictionary
-if CDR3_PATH:
-    with open(CDR3_PATH) as f:
-        reader = csv.reader(f)
-        CDR3_DICT = {rows[0]:rows[1] for rows in reader}
-
-# convert fasta into dictionary
 def fasta_to_dict(fasta_file):
-    """
-    Converts a fasta file into a dictionary with sequence IDs as keys and sequences as values.
-
-    Args:
-        fasta_file (str): Path to the fasta file.
-
-    Returns:
-        dict: A dictionary with sequence IDs as keys and sequences as values.
-    """
+    """Convert FASTA file into a dictionary."""
     print('Loading and batching input sequences...')
     seq_dict = {}
     with open(fasta_file) as f:
         for record in SeqIO.parse(f, 'fasta'):
-            seq_dict[record.id] = str(record.seq)
+            seq_dict[record.id] = " ".join(str(record.seq)) # AA tokens for hugging face models must be space gapped
             # print progress
             if len(seq_dict) % 1000 == 0:
                 print(f'{len(seq_dict)} sequences loaded')
-    return seq_dict            
+    return seq_dict
 
+def load_cdr3(cdr3_path):
+    """Load CDR3 sequences and store in a dictionary."""
+    if cdr3_path:
+        with open(cdr3_path) as f:
+            reader = csv.reader(f)
+            cdr3_dict = {rows[0]:rows[1] for rows in reader}
+        return cdr3_dict
+    else:
+        return None
 
-FASTA_SEQUENCES = fasta_to_dict(FASTA_FILE)
+def initialize_model(model_name=MODEL_NAME):
+    # Loading the pretrained model and alphabet for tokenization
+    print("Loading model...")
+    model, alphabet = pretrained.load_model_and_alphabet(model_name)
+    model.eval()  # Setting the model to evaluation mode
 
-# make sure FASTA_SEQUENCES and CDR3_DICT have the same keys
-if CDR3_PATH:
-    FASTA_KEYS = set(FASTA_SEQUENCES.keys())
-    CDR3_KEYS = set(CDR3_DICT.keys())
-    missing_keys = FASTA_KEYS - CDR3_KEYS
-    for key in missing_keys:
-        FASTA_SEQUENCES.pop(key)
+    # Moving the model to GPU if available for faster processing
+    if torch.cuda.is_available():
+        model = model.cuda()
+        print("Transferred model to GPU")
+        device = "cuda"
+    return model, alphabet
 
-# TODO investigate missing_keys
-if CDR3_PATH:
-    missing_keys = [key for key in FASTA_SEQUENCES if key not in CDR3_DICT]
+def load_data(fasta_path, alphabet, batch_size=BATCH_SIZE):
+    print('Loading and batching input sequences...')
+    # Creating a dataset from the input fasta file
+    dataset = FastaBatchedDataset.from_file(fasta_path)
+    # Generating batch indices based on token count
+    batches = dataset.get_batch_indices(batch_size, extra_toks_per_seq=1)
+    # DataLoader to iterate through batches efficiently
+    data_loader = torch.utils.data.DataLoader(
+        dataset, collate_fn=alphabet.get_batch_converter(), batch_sampler=batches
+    )
+    print(f"Read {fasta_path} with {len(dataset)} sequences")
+    return data_loader, batches
 
-# Pre-defined model location and batch token size
-MODEL_LOCATION = "esm2_t33_650M_UR50D"
-TOKS_PER_BATCH = 8192 # works with Nvidia V100-32GB GPU
+def load_layers(model, layers):
+    # Checking if the specified representation layers are valid
+    assert all(-(model.num_layers + 1) <= i <= model.num_layers for i in layers)
+    layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in layers]
+    return layers
 
-# Loading the pretrained model and alphabet for tokenization
-print("Loading model...")
-MODEL, ALPHABET = pretrained.load_model_and_alphabet(MODEL_LOCATION)
-MODEL.eval()  # Setting the model to evaluation mode
+def compute_embeddings(data_loader, batches, model, layers, sequences, context, pooling, cdr3_path, cdr3_dict):
+    """Compute embeddings for the sequences."""
+    # Initializing lists to store mean representations and sequence labels
+    mean_representations = {layer: [] for layer in layers}
+    sequence_labels = []
+    # Processing each batch without computing gradients (to save memory and computation)
+    with torch.no_grad():
+        total_batches = len(data_loader)
+        for batch_idx, (labels, strs, toks) in enumerate(data_loader):
+            print(
+                f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
+            )
 
-# Moving the model to GPU if available for faster processing
-if torch.cuda.is_available():
-    MODEL = MODEL.cuda()
-    print("Transferred model to GPU")
+            # Moving tokens to GPU if available
+            if torch.cuda.is_available():
+                toks = toks.to(device="cuda", non_blocking=True)
 
-print('Loading and batching input sequences...')
-# Creating a dataset from the input fasta file
-DATASET = FastaBatchedDataset.from_file(FASTA_FILE)
-# Generating batch indices based on token count
-BATCHES = DATASET.get_batch_indices(TOKS_PER_BATCH, extra_toks_per_seq=1)
-# DataLoader to iterate through batches efficiently
-DATA_LOADER = torch.utils.data.DataLoader(
-    DATASET, collate_fn=ALPHABET.get_batch_converter(), batch_sampler=BATCHES
-)
+            # Computing representations for the specified layers
+            out = model(toks, repr_layers=layers, return_contacts=False)
 
-print(f"Read {FASTA_FILE} with {len(DATASET)} sequences")
+            # Extracting layer representations and moving them to CPU
+            representations = {
+                layer: t.to(device="cpu") for layer, t in out["representations"].items()
+            }
 
-# Checking if the specified representation layers are valid
-assert all(-(MODEL.num_layers + 1) <= i <= MODEL.num_layers for i in LAYERS)
-
-LAYERS = [(i + MODEL.num_layers + 1) % (MODEL.num_layers + 1) for i in LAYERS]
-
-# Initializing lists to store mean representations and sequence labels
-mean_representations = {layer: [] for layer in LAYERS}
-sequence_labels = []
-# Processing each batch without computing gradients (to save memory and computation)
-with torch.no_grad():
-    for batch_idx, (labels, strs, toks) in enumerate(DATA_LOADER):
-        print(
-            f"Processing {batch_idx + 1} of {len(BATCHES)} batches ({toks.size(0)} sequences)"
-        )
-        
-
-        # Moving tokens to GPU if available
-        if torch.cuda.is_available():
-            toks = toks.to(device="cuda", non_blocking=True)
-
-        # Computing representations for the specified layers
-        out = MODEL(toks, repr_layers=LAYERS, return_contacts=False)
-
-        # Extracting layer representations and moving them to CPU
-        representations = {
-            layer: t.to(device="cpu") for layer, t in out["representations"].items()
-        }
-
-        if CDR3_PATH is None:
-            for counter, label in enumerate(labels):
-                sequence_labels.append(label)
-                for layer in LAYERS:
-                    if POOLING:
-                        mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].mean(0).clone()
-                    else:
-                        mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].clone()
-                    # We take mean_representation[0] to keep the [array] instead of [[array]].
-                    mean_representations[layer].append(mean_representation)
-        else:
-            # Mean pooling representations for each sequence,
-            # excluding the beginning-of-sequence (bos) token
-            for i, label in enumerate(labels):
-                try:
-                    cdr3_sequence = CDR3_DICT[label]
-                except KeyError:
-                    if label not in missing_keys:
+            if cdr3_path is None:
+                for counter, label in enumerate(labels):
+                    sequence_labels.append(label)
+                    for layer in layers:
+                        if pooling:
+                            mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].mean(0).clone()
+                        else:
+                            mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].clone()
+                        # We take mean_representation[0] to keep the [array] instead of [[array]].
+                        mean_representations[layer].append(mean_representation)
+            else:
+                # Mean pooling representations for each sequence,
+                # excluding the beginning-of-sequence (bos) token
+                for i, label in enumerate(labels):
+                    try:
+                        cdr3_sequence = cdr3_dict[label]
+                    except KeyError:
                         print(f'No cdr3 sequence found for {label}')
-                    continue
-                
-                #print(f'Processing {label}')
-                full_sequence = FASTA_SEQUENCES[label]
+                        continue
+                    
+                    #print(f'Processing {label}')
+                    full_sequence = sequences[label]
+
+                    # remove '-' from cdr3_sequence
+                    cdr3_sequence = cdr3_sequence.replace('-', '')
+
+                    # get position of cdr3_sequence in sequence
+                    start = max(full_sequence.find(cdr3_sequence) - context, 0)
+                    end = max(start + len(cdr3_sequence) + context, len(full_sequence))
+                    sequence_labels.append(label)
+                    for layer in layers:
+                        if pooling:
+                            mean_representation = representations[layer][i, start : end].mean(0).clone()
+                        else:
+                            mean_representation = representations[layer][i, start : end].clone()
+                        # We take mean_representation[0] to keep the [array] instead of [[array]].
+                        mean_representations[layer].append(mean_representation)
+            # print the progress in one line
+            print(f"Batch {batch_idx + 1}/{total_batches} completed", end='\r')
+    print('Finished processing sequences')
+    # Clear GPU memory
+    print("Clearing GPU memory...")
+    torch.cuda.empty_cache()
+    return mean_representations, sequence_labels
+
+def export_embeddings(mean_representations, layers, output_path, context=None, pooling=True):
+    """Stack representations of each layer into a single tensor and save to output file."""
+    for layer in layers:
+        if context:
+            output_file_layer = output_path.replace('.pt', f'_context_{context}_layer_{layer}.pt')
+        else:
+            output_file_layer = output_path.replace('.pt', f'_layer_{layer}.pt')
+        if pooling:
+            mean_representations[layer] = torch.vstack(mean_representations[layer])
+        else:
+            output_file_layer = output_file_layer.replace('.pt', '_full.pt')
+        torch.save(mean_representations[layer], output_file_layer)
+        print(f"Saved mean representations for layer {layer} to {output_file_layer}")
+
+def export_sequence_indices(sequence_labels, output_path):
+    """Save sequence indices to a CSV file."""
+    output_file_idx = output_path.replace('.pt', '_idx.csv')
+    with open(output_file_idx, 'w') as f:
+        f.write('index,sequence_id\n')
+        for i, label in enumerate(sequence_labels):
+            f.write(f'{i},{label}\n')
+    print(f"Saved sequence indices to {output_file_idx}")
 
 
+def main():
+    args = parse_arguments()
+    # Store arguments
+    fasta_path = args.fasta_path
+    output_path = args.output_path
+    cdr3_path = args.cdr3_path
+    context = args.context
+    layers = list(map(int, args.layers[0].split()))
+    pooling = bool(args.pooling)
 
-                # remove '-' from cdr3_sequence
-                cdr3_sequence = cdr3_sequence.replace('-', '')
+    # Read sequences from the FASTA file
+    sequences = fasta_to_dict(fasta_path)
 
-                # get position of cdr3_sequence in sequence
-                start = max(full_sequence.find(cdr3_sequence) - CONTEXT, 0)
-                end = max(start + len(cdr3_sequence) + CONTEXT, len(full_sequence))
-                sequence_labels.append(label)
-                for layer in LAYERS:
-                    if POOLING:
-                        mean_representation = representations[layer][i, start : end].mean(0).clone()
-                    else:
-                        mean_representation = representations[layer][i, start : end].clone()
-                    # We take mean_representation[0] to keep the [array] instead of [[array]].
-                    mean_representations[layer].append(mean_representation)
-print('Finished processing sequences')
-# Clear GPU memory
-print("Clearing GPU memory...")
-torch.cuda.empty_cache()
+    # Check if output directory exists and creates it if it's missing
+    if not os.path.exists(os.path.dirname(output_path)):
+        # if the directory is not present create it.
+        os.makedirs(os.path.dirname(output_path))
 
-print("Saving mean representations to output file...")
-# Stacking all mean representations into a single tensor and save to output file
+    # load CDR3 sequences if given
+    cdr3_dict = load_cdr3(cdr3_path)
 
-# Save mean pooled representations for each layer to a separate file
-for layer in LAYERS:
-    if CONTEXT:
-        output_file_layer = OUTPUT_PATH.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
-    else:
-        output_file_layer = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
-    if POOLING:
-        mean_representations[layer] = torch.vstack(mean_representations[layer])
-    else:
-        output_file_layer = output_file_layer.replace('.pt', '_full.pt')
-    torch.save(mean_representations[layer], output_file_layer)
-    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
+    # Initialize model and prepare input data
+    model, alphabet = initialize_model(MODEL_NAME)
+    layers = load_layers(model, layers)
+    data_loader, batches = load_data(fasta_path, alphabet, BATCH_SIZE)
 
-# Save sequence labels to a csv file
-OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
-with open(OUTPUT_FILE_IDX, 'w') as f:
-    f.write('index,sequence_id\n')
-    for i, label in enumerate(sequence_labels):
-        f.write(f'{i},{label}\n')
-print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")
+    # Compute embeddings
+    mean_representations, sequence_labels = compute_embeddings(
+        data_loader, batches, model, layers, sequences,
+        context, pooling, cdr3_path, cdr3_dict
+        )
+
+    # Write embeddings to disk and export sequence indices
+    export_embeddings(mean_representations, layers, output_path, context, pooling)
+    export_sequence_indices(sequence_labels, output_path)
+
+if __name__ == "__main__":
+    main()
