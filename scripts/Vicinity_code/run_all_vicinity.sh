@@ -2,7 +2,8 @@
 
 # Define the parameters for each combination
 models=("antiberta2" "esm2")
-chains=("full_chain" "cdr3_only")
+# chains=("full_chain" "cdr3_only")
+chains=("cdr3_pooled" "paired_chain" "all_cdrh")
 layers=$(seq 0 32)  # Bash doesn't have range, using seq to create a range from 0 to 32 (for layers 0 to 32)
 
 # Input metadata and precomputed LD
@@ -29,7 +30,8 @@ for model in "${models[@]}"; do
       # Construct input embeddings and index file paths
       input_idx="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/${model}/100k_sample_trastuzmab_${model}_idx.csv"
       input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/${model}/${chain}/100k_sample_trastuzmab_${chain}_${model}_layer_$((layer+1)).pt"
-
+      # ab2 layer 17 and above are not available
+      if [[ "$model" == "antiberta2" && $layer -ge 17 ]]; then continue; fi
   
       # Construct the command
       command=(
