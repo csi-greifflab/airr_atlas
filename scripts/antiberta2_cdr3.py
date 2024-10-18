@@ -26,209 +26,177 @@ Dependencies:
 """
 
 import os
-import csv
-import argparse
-from Bio import SeqIO
 import torch
 from transformers import RoFormerTokenizer, RoFormerModel
 from torch.utils.data import DataLoader, TensorDataset
-
-
-
-
-
-#Parsing command-line arguments for input and output file paths
-PARSER = argparse.ArgumentParser(description="Input path")
-PARSER.add_argument("--fasta_path", type=str, required=True,
-                    help="Fasta path + filename.fa")
-PARSER.add_argument("--output_path", type=str, required=True,
-                    help="Output path + filename.pt \nWill output multiple files if multiple layers are specified with '--layers'. Output file is a single tensor or a list of tensors when --pooling is False.")
-PARSER.add_argument("--cdr3_path", default = None, type=str,
-                    help="Path to the CDR3 CSV file. Only required when calculating CDR3 sequence embeddings.")
-PARSER.add_argument("--context", default = 0,type=int,
-                    help="Number of amino acids to include before and after CDR3 sequence")
-PARSER.add_argument("--layers", type=str, nargs='*', default="-1",
-                    help="Representation layers to extract from the model. Default is the last layer. Example: argument '--layers -1 6' will output the last layer and the sixth layer.")
-PARSER.add_argument('--pooling', type=lambda x: (str(x).lower() == 'true'), default=True,
-                    help="Whether to pool the embeddings or not. Default is True.")
-args = PARSER.parse_args()
-
-# Storing arguments
-FASTA_PATH = args.fasta_path
-OUTPUT_PATH = args.output_path
-CDR3_PATH = args.cdr3_path
-CONTEXT = args.context
-LAYERS = list(map(int, args.layers[0].split()))
-if args.pooling:
-    POOLING = True
-else:
-    POOLING = False
-
-######## debug
-#import os
-#os.environ["PYTORCH_CUDA_ALLOC_CONF"]='expandable_segments:True'
-#FASTA_PATH = '/doctorai/userdata/airr_atlas/data/sequences/wang/first_10.fasta'
-#OUTPUT_PATH = '/doctorai/userdata/airr_atlas/test/test_cdr3.pt'
-#CDR3_PATH = '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab_heavy_chains/trastuzumab_heavy_chains_cdr3.csv'
-#CDR3_PATH = None
-#CONTEXT = 0
-#LAYERS = list(range(1,17))
-
-# convert fasta into dictionary
-def fasta_to_dict(fasta_file):
-    print('Loading and batching input sequences...')
-    seq_dict = {}
-    with open(fasta_file) as f:
-        for record in SeqIO.parse(f, 'fasta'):
-            seq_dict[record.id] = " ".join(str(record.seq)) # AA tokens for hugging face models must be space gapped
-            # print progress
-            if len(seq_dict) % 1000 == 0:
-                print(f'{len(seq_dict)} sequences loaded')
-    return seq_dict
-
-# Read sequences from the FASTA file
-SEQUENCES = fasta_to_dict(FASTA_PATH)
-
-# Check if output directory exists and creates it if it's missing
-if not os.path.exists(os.path.dirname(OUTPUT_PATH)):
-    # if the directory is not present create it.
-    os.makedirs(os.path.dirname(OUTPUT_PATH))
-
-# Load cdr3 sequences and store in dictionary
-if CDR3_PATH:
-    with open(CDR3_PATH) as f:
-        READER = csv.reader(f)
-        CDR3_DICT = {rows[0]:rows[1] for rows in READER}
-    # TODO investigate missing_keys
-    MISSING_KEYS = [key for key in SEQUENCES if key not in CDR3_DICT]
-
-
-
-
-# Pre-defined parameters for optimization
+from .embedding_utils import parse_arguments, fasta_to_dict, load_cdr3, export_embeddings, export_sequence_indices
+# Constants
 MODEL_NAME = "alchemab/antiberta2-cssp"
 BATCH_SIZE = 512  # Adjust based on your GPU's memory
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-TOKENIZER = RoFormerTokenizer.from_pretrained(MODEL_NAME)
-MODEL = RoFormerModel.from_pretrained(MODEL_NAME).to(DEVICE)
-MODEL.eval()
+MAX_LENGTH = 200
 
-# Checking if the specified representation layers are valid
-assert all(-(MODEL.config.num_hidden_layers + 1) <= i <= MODEL.config.num_hidden_layers for i in LAYERS)
-LAYERS = [(i + MODEL.config.num_hidden_layers + 1) % (MODEL.config.num_hidden_layers + 1) for i in LAYERS]
+def initialize_model(model_name):
+    """Initialize the model, tokenizer, and device."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokenizer = RoFormerTokenizer.from_pretrained(model_name)
+    model = RoFormerModel.from_pretrained(model_name).to(device)
+    model.eval()
+    return model, device, tokenizer
 
-print("Start tokenization")
+def load_layers(model, layers):
+    """Check if the specified representation layers are valid."""
+    assert all(-(model.config.num_hidden_layers + 1) <= i <= model.config.num_hidden_layers for i in layers)
+    layers = [(i + model.config.num_hidden_layers + 1) % (model.config.num_hidden_layers + 1) for i in layers]
+    return layers
 
-# Tokenize sequences
-INPUT_IDS = []
-ATTENTION_MASKS = []
-TOTAL_SEQUENCES = len(SEQUENCES)
-for counter, sequence in enumerate(SEQUENCES.values()):
-    #tokens = tokenizer(sequence,truncation=True, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=200)
-    #tokenize sequences without truncation
-    tokens = TOKENIZER(sequence,truncation=False, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=200)
-    #print( tokenizer.decode(tokens['input_ids'][0]))
-    INPUT_IDS.append(tokens['input_ids'])
-    ATTENTION_MASKS.append(tokens['attention_mask'])
-    # Calculate and print the percentage of completion
-    percent_complete = ((counter + 1) / TOTAL_SEQUENCES) * 100
-    # Check and print the progress at each 2% interval
-    if (counter + 1) == TOTAL_SEQUENCES or int(percent_complete) % 2 == 0:
-        # Ensures the message is printed once per interval and at 100% completion
-        if (counter + 1) == TOTAL_SEQUENCES or (int(percent_complete / 2) != int(((counter) / TOTAL_SEQUENCES) * 100 / 2)):
-            print(f"Progress: {percent_complete:.2f}%")
-TOKENIZER.decode(INPUT_IDS[0][0])
+def load_data(sequences, tokenizer, batch_size, max_length=200):
+    """Tokenize sequences and create a DataLoader."""
+    # Tokenize sequences
+    input_ids = []
+    attention_masks = []
+    total_sequences = len(sequences)
+    print("Start tokenization")
+    for counter, sequence in enumerate(sequences.values()):
+        #tokens = tokenizer(sequence,truncation=True, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=200)
+        #tokenize sequences without truncation
+        tokens = tokenizer(sequence,truncation=False, padding='max_length', return_tensors="pt",add_special_tokens=True, max_length=max_length)
+        #print( tokenizer.decode(tokens['input_ids'][0]))
+        input_ids.append(tokens['input_ids'])
+        attention_masks.append(tokens['attention_mask'])
+        # Calculate and print the percentage of completion
+        percent_complete = ((counter + 1) / total_sequences) * 100
+        # Check and print the progress at each 2% interval
+        if (counter + 1) == total_sequences or int(percent_complete) % 2 == 0:
+            # Ensures the message is printed once per interval and at 100% completion
+            if (counter + 1) == total_sequences or (int(percent_complete / 2) != int(((counter) / total_sequences) * 100 / 2)):
+                print(f"Progress: {percent_complete:.2f}%")
 
+    # Convert lists to tensors and create a dataset
+    input_ids = torch.cat(input_ids, dim=0)
+    attention_masks = torch.cat(attention_masks, dim=0)
+    dataset = TensorDataset(input_ids, attention_masks)
+    data_loader = DataLoader(dataset, batch_size=batch_size)
+    return data_loader
 
-# Convert lists to tensors and create a dataset
-INPUT_IDS = torch.cat(INPUT_IDS, dim=0)
-ATTENTION_MASKS = torch.cat(ATTENTION_MASKS, dim=0)
-DATASET = TensorDataset(INPUT_IDS, ATTENTION_MASKS)
-DATA_LOADER = DataLoader(DATASET, batch_size=BATCH_SIZE)
-
-# Initialize a list to store embeddings
-MEAN_REPRESENTATIONS = {layer: [] for layer in LAYERS}
-sequence_labels = []
-with torch.no_grad():
-    TOTAL_BATCHES = len(DATA_LOADER)  # Correctly calculate the total number of batches here
-
-    for batch_idx, batch in enumerate(DATA_LOADER):
-        labels = list(SEQUENCES.keys())[batch_idx * BATCH_SIZE : (batch_idx + 1) * BATCH_SIZE]
-        INPUT_IDS, attention_mask = [b.to(DEVICE, non_blocking=True) for b in batch]
-        
-        outputs = MODEL(input_ids=INPUT_IDS, attention_mask=attention_mask, output_hidden_states=True)
-        # Extracting layer representations and moving them to CPU
-        representations = {layer: outputs.hidden_states[layer].to(device="cpu") for layer in LAYERS}
-        
-        # TODO add optional argument to return mean pooled full embedding even if cdr3_path is specified
-        if CDR3_PATH is None:
-            # Append labels to SEQUENCE_LABELS
-            sequence_labels.extend(labels)
-            for layer in LAYERS:
-                if POOLING:
-                    MEAN_REPRESENTATIONS[layer].extend(
-                        representations[layer][i, 1: len(SEQUENCES[label]) + 1].mean(0).clone()
-                        for i, label in enumerate(labels)
-                    )
-                else:
-                    MEAN_REPRESENTATIONS[layer].extend(
-                        representations[layer][i, 1: len(SEQUENCES[label]) + 1].clone()
-                        for i, label in enumerate(labels)
-                    )
-                        
-        else:
-            for counter, label in enumerate(labels):
-                try:
-                    cdr3_sequence = CDR3_DICT[label]
-                except KeyError:
-                    if label not in MISSING_KEYS:
-                        print(f'No cdr3 sequence found for {label}')
-                    continue
-                #print(f'Processing {label}')
-
-                # load sequence without spaces
-                full_sequence = SEQUENCES[label].replace(' ', '')
-
-                # remove '-' from cdr3_sequence
-                cdr3_sequence = cdr3_sequence.replace('-', '')
-
-                # get position of cdr3_sequence in sequence
-                start = max(full_sequence.find(cdr3_sequence) - CONTEXT, 0)
-                end = max(start + len(cdr3_sequence) + CONTEXT, len(full_sequence))
-                sequence_labels.append(label)
-
-                for layer in LAYERS:
-                    if POOLING:
-                        mean_representation = representations[layer][counter, start : end].mean(0).clone()
+def compute_embeddings(data_loader, model, device,
+                       layers, sequences, context, pooling, cdr3_path, cdr3_dict, batch_size):
+    """Compute embeddings for the sequences."""
+    # Initializing lists to store mean representations and sequence labels
+    mean_representations = {layer: [] for layer in layers}
+    sequence_labels = []
+    # Processing each batch without computing gradients (to save memory and computation)
+    with torch.no_grad():
+        total_batches = len(data_loader)
+        for batch_idx, batch in enumerate(data_loader):
+            labels = list(sequences.keys())[batch_idx * batch_size : (batch_idx + 1) * batch_size]
+            input_ids, attention_mask = [b.to(device, non_blocking=True) for b in batch]
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True
+                )
+            # Extracting layer representations and moving them to CPU
+            representations = {
+                layer:outputs.hidden_states[layer].to(device="cpu")
+                for layer in layers
+                }
+            # TODO add optional argument to return mean pooled full embedding even if cdr3_path is specified
+            if cdr3_path is None:
+                # Append labels to SEQUENCE_LABELS
+                sequence_labels.extend(labels)
+                for layer in layers:
+                    if pooling:
+                        mean_representations[layer].extend(
+                            representations[layer][i, 1: len(sequences[label]) + 1].mean(0).clone()
+                            for i, label in enumerate(labels)
+                        )
                     else:
-                        mean_representation = representations[layer][counter, start : end].clone()
-                    # We take mean_representation[0] to keep the [array] instead of [[array]].
-                    MEAN_REPRESENTATIONS[layer].append(mean_representation)
+                        mean_representations[layer].extend(
+                            representations[layer][i, 1: len(sequences[label]) + 1].clone()
+                            for i, label in enumerate(labels)
+                        )
+            else:
+                for counter, label in enumerate(labels):
+                    try:
+                        cdr3_sequence = cdr3_dict[label]
+                    except KeyError:
+                        print(f'No cdr3 sequence found for {label}')
+                        continue
+                    #print(f'Processing {label}')
 
-        # print the progress
-        #print(
-        #    f"Processing {batch_idx + 1} of {TOTAL_BATCHES} batches ({INPUT_IDS.size(0)} sequences)"
-        #)
+                    # load sequence without spaces
+                    full_sequence = sequences[label].replace(' ', '')
 
-# Clear GPU memory
-torch.cuda.empty_cache()
+                    # remove '-' from cdr3_sequence
+                    cdr3_sequence = cdr3_sequence.replace('-', '')
 
-# Stacking representations of each layer into a single tensor and save to output file
-for layer in LAYERS:
-    if CONTEXT:
-        output_file_layer = OUTPUT_PATH.replace('.pt', f'_context_{CONTEXT}_layer_{layer}.pt')
-    else:
-        output_file_layer = OUTPUT_PATH.replace('.pt', f'_layer_{layer}.pt')
-    if POOLING:
-        MEAN_REPRESENTATIONS[layer] = torch.vstack(MEAN_REPRESENTATIONS[layer])
-    else:
-        output_file_layer = output_file_layer.replace('.pt', '_full.pt')
-    torch.save(MEAN_REPRESENTATIONS[layer], output_file_layer)
-    print(f"Saved mean representations for layer {layer} to {output_file_layer}")
+                    # get position of cdr3_sequence in sequence
+                    start = max(full_sequence.find(cdr3_sequence) - context, 0)
+                    end = max(start + len(cdr3_sequence) + context, len(full_sequence))
+                    sequence_labels.append(label)
 
-OUTPUT_FILE_IDX = OUTPUT_PATH.replace('.pt', '_idx.csv')
-with open(OUTPUT_FILE_IDX, 'w') as f:
-    f.write('index,sequence_id\n')
-    for i, label in enumerate(sequence_labels):
-        f.write(f'{i},{label}\n')
-print(f"Saved sequence indices to {OUTPUT_FILE_IDX}")
+                    for layer in layers:
+                        if pooling:
+                            mean_representation = (
+                                representations[layer][counter, start : end]
+                                .mean(0)
+                                .clone()
+                            )
+                        else:
+                            mean_representation = representations[layer][counter, start : end].clone()
+                        # We take mean_representation[0] to keep the [array] instead of [[array]].
+                        mean_representations[layer].append(mean_representation)
+
+            # print the progress in one line
+            print(f"Batch {batch_idx + 1}/{total_batches} completed", end='\r')
+    # Clear GPU memory
+    torch.cuda.empty_cache()
+    return mean_representations, sequence_labels
+
+def main():
+    args = parse_arguments()
+    # Store arguments
+    fasta_path = args.fasta_path
+    output_path = args.output_path
+    cdr3_path = args.cdr3_path
+    context = args.context
+    layers = list(map(int, args.layers))
+    pooling = bool(args.pooling)
+    # Print summary of arguments
+    print(f"FASTA file: {fasta_path}")
+    print(f"Output file: {output_path}")
+    if cdr3_path:
+        print(f"CDR3 file: {cdr3_path}")
+    if context:
+        print(f"Context: {context}")
+    print(f"Layers: {layers}")
+    print(f"Pooling: {pooling}\n")
+
+    # Read sequences from the FASTA file
+    sequences = fasta_to_dict(fasta_path)
+
+    # Check if output directory exists and creates it if it's missing
+    if not os.path.exists(os.path.dirname(output_path)):
+        # if the directory is not present create it.
+        os.makedirs(os.path.dirname(output_path))
+
+    # load CDR3 sequences if given
+    cdr3_dict = load_cdr3(cdr3_path)
+
+    # Initialize model and prepare input data
+    model, device, tokenizer = initialize_model(MODEL_NAME)
+    layers = load_layers(model, layers)
+    data_loader = load_data(sequences, tokenizer, BATCH_SIZE, max_length=MAX_LENGTH)
+
+    # Compute embeddings
+    mean_representations, sequence_labels = compute_embeddings(
+        data_loader, model, device, layers, sequences,
+        context, pooling, cdr3_path, cdr3_dict, BATCH_SIZE
+        )
+
+    # Write embeddings to disk and export sequence indices
+    export_embeddings(mean_representations, layers, output_path, context, pooling)
+    export_sequence_indices(sequence_labels, output_path) 
+
+if __name__ == "__main__":
+    main()
