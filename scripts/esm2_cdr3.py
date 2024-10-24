@@ -25,15 +25,27 @@ Dependencies:
     - torch.utils.data (PyTorch)
 """
 
+import sys
+
+sys.path.append(
+    "/doctorai/userdata/airr_atlas/"
+)  # Add the project directory to the Python path
 import os
-import argparse
 import torch
 from esm import FastaBatchedDataset, pretrained
-from .embedding_utils import parse_arguments, fasta_to_dict, load_cdr3, export_embeddings, export_sequence_indices
+from scripts.embedding_utils import (
+    parse_arguments,
+    fasta_to_dict,
+    load_cdr3,
+    export_embeddings,
+    export_sequence_indices,
+)
+import time
 
 # Constants
 MODEL_NAME = "esm2_t33_650M_UR50D"
-BATCH_SIZE = 20000 # works with Nvidia V100-32GB GPU
+BATCH_SIZE = 30000  # works with Nvidia V100-32GB GPU
+
 
 def initialize_model(model_name=MODEL_NAME):
     """Initialize the model, tokenizer"""
@@ -48,8 +60,9 @@ def initialize_model(model_name=MODEL_NAME):
         print("Transferred model to GPU")
     return model, alphabet
 
+
 def load_data(fasta_path, alphabet, batch_size=BATCH_SIZE):
-    print('Loading and batching input sequences...')
+    print("Loading and batching input sequences...")
     # Creating a dataset from the input fasta file
     dataset = FastaBatchedDataset.from_file(fasta_path)
     # Generating batch indices based on token count
@@ -59,7 +72,8 @@ def load_data(fasta_path, alphabet, batch_size=BATCH_SIZE):
         dataset, collate_fn=alphabet.get_batch_converter(), batch_sampler=batches
     )
     print(f"Read {fasta_path} with {len(dataset)} sequences")
-    return data_loader, batches
+    return data_loader
+
 
 def load_layers(model, layers):
     # Checking if the specified representation layers are valid
@@ -67,7 +81,10 @@ def load_layers(model, layers):
     layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in layers]
     return layers
 
-def compute_embeddings(data_loader, batches, model, layers, sequences, context, pooling, cdr3_path, cdr3_dict):
+
+def compute_embeddings(
+    data_loader, model, layers, sequences, context, pooling, cdr3_path, cdr3_dict
+):
     """Compute embeddings for the sequences."""
     # Initializing lists to store mean representations and sequence labels
     mean_representations = {layer: [] for layer in layers}
@@ -76,10 +93,7 @@ def compute_embeddings(data_loader, batches, model, layers, sequences, context, 
     with torch.no_grad():
         total_batches = len(data_loader)
         for batch_idx, (labels, strs, toks) in enumerate(data_loader):
-            print(
-                f"Processing {batch_idx + 1} of {len(batches)} batches ({toks.size(0)} sequences)"
-            )
-
+            start_time = time.time()
             # Moving tokens to GPU if available
             if torch.cuda.is_available():
                 toks = toks.to(device="cuda", non_blocking=True)
@@ -97,9 +111,17 @@ def compute_embeddings(data_loader, batches, model, layers, sequences, context, 
                     sequence_labels.append(label)
                     for layer in layers:
                         if pooling:
-                            mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].mean(0).clone()
+                            mean_representation = (
+                                representations[layer][
+                                    counter, 1 : len(strs[counter]) + 1
+                                ]
+                                .mean(0)
+                                .clone()
+                            )
                         else:
-                            mean_representation = representations[layer][counter, 1: len(strs[counter]) + 1].clone()
+                            mean_representation = representations[layer][
+                                counter, 1 : len(strs[counter]) + 1
+                            ].clone()
                         # We take mean_representation[0] to keep the [array] instead of [[array]].
                         mean_representations[layer].append(mean_representation)
             else:
@@ -109,53 +131,62 @@ def compute_embeddings(data_loader, batches, model, layers, sequences, context, 
                     try:
                         cdr3_sequence = cdr3_dict[label]
                     except KeyError:
-                        print(f'No cdr3 sequence found for {label}')
+                        print(f"No cdr3 sequence found for {label}")
                         continue
-                    
-                    #print(f'Processing {label}')
+
+                    # print(f'Processing {label}')
                     full_sequence = sequences[label]
 
                     # remove '-' from cdr3_sequence
-                    cdr3_sequence = cdr3_sequence.replace('-', '')
+                    cdr3_sequence = cdr3_sequence.replace("-", "")
 
                     # get position of cdr3_sequence in sequence
                     start = max(full_sequence.find(cdr3_sequence) - context, 0)
-                    end = max(start + len(cdr3_sequence) + context, len(full_sequence))
+                    end = min(start + len(cdr3_sequence) + context, len(full_sequence))
                     sequence_labels.append(label)
                     for layer in layers:
                         if pooling:
-                            mean_representation = representations[layer][i, start : end].mean(0).clone()
+                            mean_representation = (
+                                representations[layer][i, start:end].mean(0).clone()
+                            )
                         else:
-                            mean_representation = representations[layer][i, start : end].clone()
+                            mean_representation = representations[layer][
+                                i, start:end
+                            ].clone()
                         # We take mean_representation[0] to keep the [array] instead of [[array]].
                         mean_representations[layer].append(mean_representation)
+
+            # Calculate tokens per second
+            tokens_per_sec = round(BATCH_SIZE / (time.time() - start_time), 2)
             # print the progress in one line
-            print(f"Batch {batch_idx + 1}/{total_batches} completed", end='\r')
-    print('Finished processing sequences')
+            print(
+                f"ESM2:       Batch {batch_idx + 1}/{total_batches} completed. {tokens_per_sec} toks/s",
+                end="\r",
+            )
+    print("Finished processing sequences")
     # Clear GPU memory
     print("Clearing GPU memory...")
     torch.cuda.empty_cache()
     return mean_representations, sequence_labels
 
+
 def main():
+    # Parse and store arguments
     args = parse_arguments()
-    # Store arguments
     fasta_path = args.fasta_path
     output_path = args.output_path
     cdr3_path = args.cdr3_path
     context = args.context
-    layers = list(map(int, args.layers))
+    layers = list(map(int, args.layers.strip().split()))
     pooling = bool(args.pooling)
+
     # Print summary of arguments
     print(f"FASTA file: {fasta_path}")
     print(f"Output file: {output_path}")
-    if cdr3_path:
-        print(f"CDR3 file: {cdr3_path}")
-    if context:
-        print(f"Context: {context}")
+    print(f"CDR3 file: {cdr3_path}")
+    print(f"Context: {context}")
     print(f"Layers: {layers}")
     print(f"Pooling: {pooling}\n")
-
 
     # Read sequences from the FASTA file
     sequences = fasta_to_dict(fasta_path)
@@ -171,17 +202,22 @@ def main():
     # Initialize model and prepare input data
     model, alphabet = initialize_model(MODEL_NAME)
     layers = load_layers(model, layers)
-    data_loader, batches = load_data(fasta_path, alphabet, BATCH_SIZE)
+    data_loader = load_data(fasta_path, alphabet, BATCH_SIZE)
 
     # Compute embeddings
     mean_representations, sequence_labels = compute_embeddings(
-        data_loader, batches, model, layers, sequences,
-        context, pooling, cdr3_path, cdr3_dict
-        )
+        data_loader, model, layers, sequences, context, pooling, cdr3_path, cdr3_dict
+    )
 
     # Write embeddings to disk and export sequence indices
     export_embeddings(mean_representations, layers, output_path, context, pooling)
     export_sequence_indices(sequence_labels, output_path)
 
+
 if __name__ == "__main__":
     main()
+# sys.argv = ['esm2_cdr3.py',
+#            '--fasta_path','/doctorai/userdata/airr_atlas/data/sequences/test.fa',
+#            '--cdr3_path', '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/tz_cdr3.csv',
+#            '--output_path','/doctorai/userdata/airr_atlas/data/embeddings/test.pt',
+#            '--layers', "1"]
