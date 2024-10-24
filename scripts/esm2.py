@@ -21,6 +21,7 @@ args = parser.parse_args()
 # Storing the input and output file paths
 fasta_file = args.fasta_path
 output_file = args.output_path
+output_file_bos = args.output_path.replace(".pt", "_bos.pt")
 
 # Pre-defined model location and batch token size
 MODEL_LOCATION = "esm2_t33_650M_UR50D"
@@ -53,6 +54,7 @@ repr_layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in REPR
 
 # Initializing lists to store mean representations and sequence labels
 mean_representations = []
+bos_representations = []
 seq_labels = []
 
 # Processing each batch without computing gradients (to save memory and computation)
@@ -80,11 +82,19 @@ with torch.no_grad():
                     for layer, t in representations.items()]
             # We take mean_representation[0] to keep the [array] instead of [[array]].
             mean_representations.append(mean_representation[0])
+            bos_representation = [t[i, 0].clone() 
+                                  for layer, t in representations.items()]
+            bos_representations.append(bos_representation[0])
             
 # Stacking all mean representations into a single tensor
 mean_representations = torch.vstack(mean_representations)
+bos_representations = torch.vstack(bos_representations)
+
 # Sorting the representations based on sequence labels
 ordering = np.argsort([int(i) for i in seq_labels])
 mean_representations = mean_representations[ordering, :]
+bos_representations = bos_representations[ordering, :]
+
 # Saving the tensor to the specified output file
 torch.save(mean_representations, output_file)
+torch.save(bos_representations, output_file_bos)
