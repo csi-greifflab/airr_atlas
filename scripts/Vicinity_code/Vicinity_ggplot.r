@@ -71,6 +71,7 @@ p_avg<-ggplot()+
   geom_line(data=df_ED, aes(AvgNN,Vicinity, ),color= "blue",  shape=4 , size=1, alpha=0.5)+
   scale_color_viridis_c( option = "F" , direction =-1)+
   facet_wrap(vars(affinity), scales = "free_x")+
+  xlim(0,1000)+
   theme_bw()
 
 

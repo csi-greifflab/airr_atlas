@@ -59,13 +59,14 @@ class Vicinity_analysis:
     
     
     
-    def __init__( self, df,neighbor_numbers,id_index, colname_affinity='affinity', colname_junction='junction_aa', metric= "euclidean"  ,parallel=False):
+    def __init__( self, df,neighbor_numbers,id_index, colname_affinity='affinity', colname_junction='junction_aa', metric= "euclidean"  ,parallel=False , skip_KNN = False):
         self.df=df
         self.neighbor_numbers= neighbor_numbers
         self.colname_affinity=colname_affinity
         self.colname_junction=colname_junction
         self.metric = metric
         self.parallel= parallel
+        self.skip_neighbors_analysis = skip_KNN
         # self.neigh = NearestNeighbors()
         # self.neigh.fit(list(self.df['embedding']))
         self.id_index=id_index
@@ -139,59 +140,66 @@ class Vicinity_analysis:
 
 
         # Compute the nearest neighbors for the maximum number of neighbors needed
-        print("Compunting KNN ...")
+        print("Computing KNN ...")
         distances, indices = self.neigh.kneighbors(self.df.iloc[self.id_index]['embedding'].tolist(), n_neighbors=max(self.neighbor_numbers))
         fractions_results = []
         indices_affinity = self.df.loc[indices.flatten(), 'affinity'].values
-        # Redimension affinity values array to corrispond to indices shape
-        id_affinty_label=self.df.loc[self.id_index, 'affinity']
+        # Redimension affinity values array to correspond to indices shape
+        id_affinity_label = self.df.loc[self.id_index, 'affinity']
         indices_affinity_mat = indices_affinity.reshape(indices.shape)
-        t_lev= time.time()        
+        t_lev = time.time()        
         print("Computing Levenshtein distances...")
         lev_mat = []
-        # # tqdm progress bar for Levenshtein distance computation
+        # tqdm progress bar for Levenshtein distance computation
         for idx in tqdm(range(len(self.id_index)), desc="Levenshtein distances"):
             seq_index = self.id_index[idx]
             NN_index = indices[idx]
             lev_mat.append(compute_levenshtein(self.df.iloc[seq_index]['junction_aa'], self.df.iloc[NN_index]['junction_aa']))
         lev_mat = np.array(lev_mat)
-        print(f' LEV running time {time.time()-t_lev}')
-        t_NN= time.time()
-        print("Calculating nearest neighbors fractions...")
-        tmp_label_res = []
-        fractions_results,tmp_label_res,knn_vicinity = [] ,[],[]
-        if self.parallel == False:
-            for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis"):
-                result, label_result , knn_perc = self._calculate_fractions_for_subset(indices, [n],id_affinty_label)
-                fractions_results.append(result)
-                tmp_label_res.append(label_result)
-                knn_vicinity.append(knn_perc)
-        # Use joblib.Parallel to parallelize the computation
-        if self.parallel == True:
-            results = Parallel(n_jobs= 10)(
-                delayed(analyze_neighbors)(self, indices, n, id_affinty_label) 
-                for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis")
-            )
-            fractions_results,tmp_label_res,knn_vicinity = [] ,[],[]
-            # Unpack the results
-            for result, label_result, knn_perc in results:
-                fractions_results.append(result)
-                tmp_label_res.append(label_result)
-                knn_vicinity.append(knn_perc)
-
-        print(f' NN running time {time.time()-t_lev}')
-        knn_vicinity= np.array(knn_vicinity)
-        # We create an empty DataFrame and fill it with the results
-        label_idx = sorted(set(key for dic in tmp_label_res for key in dic.keys()))
-        result_labels_df = pd.DataFrame(index=label_idx)# Create index from all possible labels
-        for i, result in enumerate(tmp_label_res): # i should be the respective NN
-            for label, percentage in result.items():
-                result_labels_df.loc[label, i] = percentage  # Set the percentage in the correct position
-        print(result_labels_df)
+        print(f' LEV running time {time.time() - t_lev}')
+        
+        if self.skip_neighbors_analysis:
+            print("Skipping Neighbors analysis...")
+            fractions_results = [np.nan] * len(self.neighbor_numbers)
+            tmp_label_res = {label: [np.nan] * len(self.neighbor_numbers) for label in id_affinity_label.unique()}
+            knn_vicinity = np.zeros((len(self.neighbor_numbers), len(self.id_index)))
+            result_labels_df = pd.DataFrame()
+        else:
+            t_NN = time.time()
+            print("Calculating nearest neighbors fractions...")
+            tmp_label_res = []
+            fractions_results, tmp_label_res, knn_vicinity = [], [], []
+            if self.parallel == False:
+                for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis"):
+                    result, label_result, knn_perc = self._calculate_fractions_for_subset(indices, [n], id_affinity_label)
+                    fractions_results.append(result)
+                    tmp_label_res.append(label_result)
+                    knn_vicinity.append(knn_perc)
+            # Use joblib.Parallel to parallelize the computation
+            if self.parallel == True:
+                results = Parallel(n_jobs=10)(
+                    delayed(analyze_neighbors)(self, indices, n, id_affinity_label) 
+                    for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis")
+                )
+                fractions_results, tmp_label_res, knn_vicinity = [], [], []
+                # Unpack the results
+                for result, label_result, knn_perc in results:
+                    fractions_results.append(result)
+                    tmp_label_res.append(label_result)
+                    knn_vicinity.append(knn_perc)
+            print(f' NN running time {time.time() - t_NN}')
+            knn_vicinity = np.array(knn_vicinity)
+            # We create an empty DataFrame and fill it with the results
+            label_idx = sorted(set(key for dic in tmp_label_res for key in dic.keys()))
+            result_labels_df = pd.DataFrame(index=label_idx)  # Create index from all possible labels
+            for i, result in enumerate(tmp_label_res):  # i should be the respective NN
+                for label, percentage in result.items():
+                    result_labels_df.loc[label, i] = percentage  # Set the percentage in the correct position
+            print(result_labels_df)
         self.label_results = result_labels_df
         self.knn_vicinity = knn_vicinity
         
-        return fractions_results,indices,distances,indices_affinity_mat,lev_mat,id_affinty_label
+        return fractions_results, indices, distances, indices_affinity_mat, lev_mat, id_affinity_label
     
     def _calculate_fractions_for_subset(self, indices, neighbor_subset,id_affinty_label):
         percentages = []
@@ -302,6 +310,7 @@ class Vicinity_analysis:
             print(f'{i}:{results[idx]:.4f} ,n_points= {mean_num_points[idx]:.4f}, %null={null_points/len(res_df[i])*100:.4f}, perc_of_LD1= {LD1_res[idx]:.4f}, perc_of_LD2= {LD2_res[idx]:.4f}')
             
         return results, res_df, mean_num_points, LD1_res, LD2_res        
+
 
 
 

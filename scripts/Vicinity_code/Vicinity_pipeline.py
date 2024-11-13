@@ -60,7 +60,7 @@ from sklearn.preprocessing import scale
 #     '--plot_results'  ,
 #     '--sample_size', '4000' ,
 #     '--LD_sample_size', '530000',
-# ]    
+# ]
 # 
 # 
 # 
@@ -81,11 +81,14 @@ def parse_arguments():
     parser.add_argument('--compute_LD', action='store_true', help='Flag to compute LD')
     parser.add_argument('--plot_results', action='store_true', help='Flag to generate plots')
     parser.add_argument('--parallel', action='store_true', help='parallelize KNN search , suggested to use with more than 500k seqs')
-    parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='euclidean', help='Metric to use')
+    parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='cosine', help='Metric to use')
     parser.add_argument('--sample_size', type=int, default= 0 , help='Size of the max sample of each label')
     parser.add_argument('--LD_sample_size', type=int, default= 10000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
     parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results')
     parser.add_argument("--radius_range", type=str, default="7,24,1", help="Specify the min and max radius and steps separated by a comma (e.g., '7,24,1')")
+    parser.add_argument('--skip_knn', action='store_true', help='Flag to skip the  KNN Vicinity ')
+
+
     return parser.parse_args()
 
 
@@ -96,7 +99,7 @@ def load_data(input_metadata, input_embeddings,idx_reference):
         raise FileNotFoundError(f"Embeddings file not found: {input_embeddings}")
     
     tensors = torch.load(input_embeddings).numpy()    
-    seqs = pd.read_csv(input_metadata, sep=None)
+    seqs = pd.read_csv(input_metadata, sep=None , engine ='python')
     if idx_reference == "":
         seqs['id'] = np.arange(0, len(seqs))
         tensors_df = pd.DataFrame({
@@ -107,7 +110,7 @@ def load_data(input_metadata, input_embeddings,idx_reference):
     else:
         #'/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_idx.csv'
         #'/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv'
-        idx_df= pd.read_csv(idx_reference, sep =None)
+        idx_df= pd.read_csv(idx_reference, sep =None , engine ='python')
         tensors_df = pd.DataFrame({
             'tensor_id': idx_df['index'],
             'sequence_id' : idx_df['sequence_id'],
@@ -155,12 +158,13 @@ df_affinity_colname= args.df_affinity_colname
 idx_reference=args.input_idx
 chosen_metric = args.chosen_metric
 parallel_choice =args.parallel
+skip_knn = args.skip_knn
 
 try:
   min_radius, max_radius, step = float(args.radius_range.split(',')[0]), float(args.radius_range.split(',')[1]), float(args.radius_range.split(',')[2])
   #ED_radius = range(min_radius, max_radius )
   ED_radius= np.arange(min_radius, max_radius, step)
-  print("Euclidean distance radius range and steps:", list(ED_radius))
+#   print("Euclidean distance radius range and steps:", list(ED_radius))
 except ValueError:
   print("Error: Please ensure you provide two integers separated by a comma for the radius range.")
 
@@ -197,8 +201,10 @@ vicinity_analysis_instance = Vicinity_analysis(df,
                                                 colname_affinity=df_affinity_colname,
                                                 colname_junction=df_junction_colname,
                                                 metric= chosen_metric,
-                                                parallel= parallel_choice)
+                                                parallel= parallel_choice,
+                                                skip_KNN=skip_knn)
 vicinity_analysis_instance.run_analysis()  # This populates the necessary attributes
+
 vicinity_analysis_instance.label_results
 
 #ED_radius = range(7, 25)  # Define your Euclidia12
@@ -215,7 +221,8 @@ tmp_ed_sum=vicinity_analysis_instance.summary_results
 ED_filename= f"{result_folder}summary_results_ED_{analysis_name}.csv"
 if args.save_results:
     vicinity_analysis_instance.save_to_pickle(f"{result_folder}Vicinity_{analysis_name}.pkl")
-    vicinity_analysis_instance.summary_results.to_csv(ED_filename)
+    
+vicinity_analysis_instance.summary_results.to_csv(ED_filename)
 
 #------ compute the LD distance on a substet as comparator
 np.random.seed(123)
@@ -259,3 +266,9 @@ if args.plot_results== True:
     run_ggplot_vicinity(analysis_name,ED_filename,LD_filename, output_path= result_folder )
 
 
+
+with open(f"{result_folder}param_log.txt", 'w') as f:
+        f.write("Parameters Summary:\n")
+        for arg, value in vars(args).items():
+            f.write(f"{arg}: {value}\n")
+    
