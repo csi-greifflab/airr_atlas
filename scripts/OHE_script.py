@@ -9,7 +9,7 @@ import time
 # Function to update the yaml content
 def update_yaml(input_path, folder_path, labels, sequence_aa_column, yaml_template):
     yaml_template['definitions']['datasets']['my_dataset']['params']['path'] = input_path
-    yaml_template['definitions']['datasets']['my_dataset']['params']['column_mapping']['sequence_aa'] = sequence_aa_column
+    yaml_template['definitions']['datasets']['my_dataset']['params']['column_mapping'][sequence_aa_column] = 'junction_aa'
     yaml_template['definitions']['datasets']['my_dataset']['params']['result_path'] = folder_path
     yaml_template['instructions']['my_instruction']['analyses']['my_analysis_1']['labels'] = labels
     return yaml_template
@@ -32,14 +32,28 @@ def main():
     --folder_path (str): Path to the immuneML results folder.
     --output_path (str): Path to the output results folder.
     --labels (list of str): List of labels for analysis.
-    --sequence_aa (str): Name of the sequence_aa column.
+    --junction_aa (str): Name of the column with the the sequence to be OHE.
     --yaml_template (str): Path to the YAML template file.
     
+
+    HOW TO RUN:
+    The script uses a YAML file as a template. 
+    It modifies this template dynamically and saves it as updated_template.yaml (or a similarly named file). 
+    After updating the template, the script invokes the immuneML program, which requires two key arguments:
+	    1.	A YAML configuration file (e.g., updated_template.yaml).
+	    2.	An output folder where results will be stored.
+
+    The process is fully automated, with the script handling the preparation of the YAML file, running immuneML, and managing the outputs.
+    Once the program completes, the specified output folder will contain the results, including:
+	•	A .pt file (e.g., containing the OHE encoded dataset in PyTorch-compatible data).
+	•	A .csv file (e.g., containing the labels of each row of the OHE dataset).
+
+
     Usage Examples:
     --------------------
     Example 1 (Basic usage):
     python script.py --input_path /path/to/input.csv --folder_path /path/to/folder --output_path /path/to/output \
-                     --labels cancer_loc --sequence_aa junction_aa --yaml_template /path/to/template.yaml
+                     --labels cancer_loc --junction_aa sequence_aa --yaml_template ./template_OHE.yaml
 
 
     Example of required csv input file:
@@ -54,7 +68,7 @@ def main():
     parser.add_argument('--folder_path', type=str, required=True, help='Path to the immuneML results folder - specify one for all the analysis')
     parser.add_argument('--output_path', type=str, required=True, help='Path to the output results folder ! THIS IS THE FOLDER WHERE THE TENSOR FILE WILL BE SAVED !')
     parser.add_argument('--labels', nargs='+', required=True, help='List of labels for analysis')
-    parser.add_argument('--sequence_aa', type=str, required=True, help='Name of the sequence_aa column')
+    parser.add_argument('--junction_aa', type=str, required=True, help='Name of the column with the the sequence to be OHE')
     parser.add_argument('--yaml_template', type=str, required=True, help='Path to the YAML template file')
     args = parser.parse_args()
 
@@ -63,7 +77,7 @@ def main():
         yaml_template = yaml.safe_load(yaml_file)
 
     # Update YAML file with user parameters
-    updated_yaml = update_yaml(args.input_path, args.folder_path, args.labels, args.sequence_aa, yaml_template)
+    updated_yaml = update_yaml(args.input_path, args.folder_path, args.labels, args.junction_aa, yaml_template)
 
     # Save the updated YAML to a new file
     updated_yaml_file = 'updated_config.yaml'
@@ -135,7 +149,7 @@ def test():
         '--folder_path', '/doctorai/niccoloc/OHE',
         '--output_path', '/doctorai/niccoloc/test1',
         '--labels', 'cancer_loc',
-        '--sequence_aa', 'junction_aa',
+        '--junction_aa', 'sequence_aa',
         '--yaml_template', '/doctorai/niccoloc/res1/full_ohe_cancer.yaml'
     ]
     import sys
@@ -144,7 +158,7 @@ def test():
     main()
 
 
-#test()
+test()
 
 if __name__ == "__main__":
     main()
