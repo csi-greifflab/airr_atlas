@@ -20,7 +20,7 @@ The following arguments are available for running the pipeline:
 - **input\_metadata** (required): Path to the input metadata file, containing the sequence labels and amino acid sequences for LD computation. Avoid numerical affinity labels.
 - **input\_embeddings** (required): Path to the input embeddings file (PyTorch tensor), with a shape of N sequences by N features.
 - **result\_dir** (default: './Vicinity\_results'): Parent directory for storing results.
-- **save\_results** (flag): Use this flag to save results to disk. Typically set to `True`.
+- **save\_results** (flag): Use this flag to save the vicinity object as .pkl to disk. If you are only interested in getting the summary results, and dont plan to do further analysis on the individual sequences, set it to 'false'
 - **compute\_LD** (flag): Flag to compute Levenshtein distance (LD). Use `precomputed_LD` if LD has already been computed.
 - **plot\_results** (flag): Flag to generate visual plots using the ggplot script.
 - **parallel** (flag): Flag to parallelize KNN search. Recommended for datasets with more than 500,000 sequences.

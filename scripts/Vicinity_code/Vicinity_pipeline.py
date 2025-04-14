@@ -21,16 +21,20 @@ from joblib import Parallel, delayed
 import pickle
 import sys
 import os
-sys.path.insert(0, '/doctorai/niccoloc/airr_atlas')
+from scipy.sparse import save_npz
+sys.path.insert(0, '/doctorai/niccoloc/airr_atlas/scripts/Vicinity_code')
 
 from Vicinity_analysis_class import Vicinity_analysis
 from Vicinity_analysis_class import calculate_moran_index
 from Vicinity_analysis_class import prepare_data_for_plotting
+from Vicinity_analysis_class import prepare_data_for_plotting_LD_MAT
 from Vicinity_analysis_class import run_ggplot_vicinity
 from libpysal.weights import W
 
 import argparse
 from sklearn.preprocessing import scale
+import tracemalloc
+
 # TODO look for LD to total TZ dataset
 # Simulate command-line arguments for debugging
 # sys.argv = [
@@ -63,9 +67,53 @@ from sklearn.preprocessing import scale
 # ]
 # 
 # 
-# 
-# 
+# sys.argv = [
+#      'Vicinity_pipeline.py' ,
+#     '--analysis_name' ,'debug_FAISS' ,
+#      '--input_metadata' ,"/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv" ,
+#      '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/esm2/embeddings_unpooled/tz_paired_chain_100k_esm2_esm2_embeddings_unpooled_layer_1.pt",
+#      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_paired_chain_100k_esm2_idx.csv",
+#      '--compute_LD' ,
+#       '--chosen_metric', 'cosine',
+#       '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
+# #     '--save_results'  ,
+# #     '--plot_results'  ,
+#       '--result_dir', '/doctorai/niccoloc/Vicinity_results_100k_4',
+#       '--df_junction_colname', 'cdr3_aa',
+#       '--df_affinity_colname', 'binding_label',
+#      '--sample_size', '4000' ,
+#      '--LD_sample_size', '530000',
+#      '--skip_knn'
+#  ]
 
+# input_idx: /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_paired_chain_100k_esm2_idx.csv
+# input_metadata: /doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv
+# input_embeddings: /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/esm2/attention_matrices_average_layer
+
+# sys.argv = [
+#      'Vicinity_pipeline.py' ,
+#      '--analysis_name' ,'LD_score_500' ,
+#      '--input_metadata' ,"/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv" ,
+#      '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/esm2/attention_matrices_average_layers/tz_cdr3_only_100k_esm2_attention_matrices_average_layers_layer_3.pt",
+#     #  '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_full/esm2/embeddings/tz_cdr3_esm2_embeddings_layer_32.pt",
+#      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_cdr3_only_100k_idx.csv",
+#     #  '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_full/tz_cdr3_idx.csv",
+#      '--compute_LD' ,
+#       '--chosen_metric', 'cosine',
+#       '--LD_matrix' , '/doctorai/niccoloc/tz_LD_dist_mat_HB_LB.npy',
+#     #   '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
+# #     '--save_results'  ,
+# #     '--plot_results'  ,
+#       '--result_dir', '/doctorai/niccoloc/Vicinity_results_sample_test',
+#       '--df_junction_colname', 'cdr3_aa',
+#       '--df_affinity_colname', 'binding_label',
+#      '--sample_size', '0' ,
+#      '--LD_sample_size', '530000',
+#      '--skip_knn'
+#  ]
+ 
+
+ 
 
 
 def parse_arguments():
@@ -84,11 +132,10 @@ def parse_arguments():
     parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='cosine', help='Metric to use')
     parser.add_argument('--sample_size', type=int, default= 0 , help='Size of the max sample of each label')
     parser.add_argument('--LD_sample_size', type=int, default= 10000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
-    parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results')
+    parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results' ,default="")
     parser.add_argument("--radius_range", type=str, default="7,24,1", help="Specify the min and max radius and steps separated by a comma (e.g., '7,24,1')")
     parser.add_argument('--skip_knn', action='store_true', help='Flag to skip the  KNN Vicinity ')
-
-
+    parser.add_argument('--LD_matrix', type=str, required=False,default="" , help='path of the precomputed file.pt with LD results')
     return parser.parse_args()
 
 
@@ -119,6 +166,7 @@ def load_data(input_metadata, input_embeddings,idx_reference):
         df = pd.merge(seqs, tensors_df, on='sequence_id')
     print("...Removing duplicated sequences ...")
     df = df[~df[args.df_junction_colname].duplicated(keep=False)]
+    print(f"Number of sequences in the dataset after de-deuplication: {len(df)}, per class: {df[args.df_affinity_colname].value_counts()}")
     df = df.reset_index(drop=True)
     df['id'] = np.arange(0, len(df))
     return df
@@ -131,7 +179,8 @@ def create_result_folder(res_folder):
 
 
 
-def filter_data(df, max_junction_length=40, sample_size=10000, rand_seed=123, junction_aa_col='junction_aa', affinity_col='affinity'):
+def filter_data(df, max_junction_length=40, sample_size=10000,
+                rand_seed=123, junction_aa_col='junction_aa', affinity_col='affinity'):
     try:
         df['junction_length'] = df[junction_aa_col].apply(len)
         df = df[df['junction_length'] <= max_junction_length]
@@ -146,10 +195,109 @@ def filter_data(df, max_junction_length=40, sample_size=10000, rand_seed=123, ju
         affinity_dfs[label] = filtered_df
     return pd.concat(affinity_dfs.values(), ignore_index=True)
 
+def format_density(value, precision):
+        return f"{value:.{precision}f}".replace(".", "")
+
+#function to sample the max numb of sequences if they are below the chosen sample size
+def sample_affinities(df, sample_size, df_affinity_colname ='affinity'):
+    np.random.seed(123)
+    df['affinity']=df[df_affinity_colname]
+    # Check the maximum available samples for each affinity
+    count_per_affinity = df['affinity'].value_counts()
+    # Sample indices for each affinity based on the minimum of available count or the desired sample size
+    sampled_indices = pd.Index([])
+    for affinity, count in count_per_affinity.items():
+        print(affinity)
+        print(count)
+        current_sample_size = min(sample_size, count)  # Adjust the sample size if necessary
+        sampled_indices = sampled_indices.append(df[df['affinity'] == affinity].sample(n=current_sample_size, random_state=42).index)
+    
+    return df.loc[sampled_indices]
+
+
+def convert_ld_results_to_long_format(ld_df):
+    """
+    Converts the input DataFrame from wide to long format.
+    
+    Parameters:
+    -----------
+    ld_df : pandas.DataFrame
+        The input DataFrame containing columns:
+            - 'LD_thr': The threshold value.
+            - 'vicinity': A list of percentages.
+            - 'num_points': A list of neighbor counts.
+            - 'binding_labels': A list of binding labels.
+            - 'sample_id': A list of sample IDs.
+    
+    Returns:
+    --------
+    new_df : pandas.DataFrame
+        A new DataFrame in long format with columns:
+        'ID', 'Threshold', 'Affinity', 'Percentage', 'Neighbors', 'local_index'
+    """
+    rows_list = []
+    for _, row in ld_df.iterrows():
+        threshold = row['LD_thr']
+        # Extract lists from the current row.
+        vicinity_all = row.get('vicinity', [])
+        num_points_all = row.get('num_points', [])
+        binding_labels = row.get('binding_labels', [])
+        sample_id = row.get('sample_id', None)
+        # Convert to list if possible.
+        if hasattr(sample_id, 'tolist'):
+            sample_id = sample_id.tolist()
+        elif sample_id is None:
+            sample_id = []
+        else:
+            sample_id = list(sample_id)
+        
+        # Determine the number of elements in the lists.
+        n_elements = len(vicinity_all)
+    
+        for i in range(n_elements):
+            rows_list.append({
+                'ID': sample_id[i] if i < len(sample_id) else None,
+                'Threshold': threshold,
+                'Affinity': binding_labels[i] if i < len(binding_labels) else None,
+                'Percentage': vicinity_all[i] if i < len(vicinity_all) else None,
+                'Neighbors': num_points_all[i] if i < len(num_points_all) else None,
+                'local_index': i,
+            })
+    
+    new_df = pd.DataFrame(rows_list)
+    return new_df
+
+
+
+def adjacency_to_csv(matrix, filename):
+    """
+    Save the adjacency matrix to a CSV file.
+    
+    Parameters:
+    -----------
+    matrix : scipy.sparse.csr_matrix
+        The adjacency matrix to save.
+    filename : str
+        The name of the output CSV file.
+    """
+    # Convert the sparse matrix to a dense format and then to a DataFrame
+    neighbors_counts = matrix.getnnz(axis=1)
+    df = pd.DataFrame({
+        "row": id_index_sample,
+        "Neighbors_Count": neighbors_counts
+    })
+    
+    # Save the DataFrame to a CSV file
+    df.to_csv(filename, index=False)
+
+
 
 
 args = parse_arguments()
+
+
 print("Starting analysis ...")
+
 
 analysis_name = args.analysis_name
 result_folder= os.path.join( args.result_dir, f"{analysis_name}/")
@@ -181,13 +329,19 @@ if args.sample_size != 0 :
                                  sample_size= args.sample_size,
                                  junction_aa_col=args.df_junction_colname,
                                  affinity_col=args.df_affinity_colname)
-    id_index_sample=df_sample_filt['id']  # sampled_index
+    id_index_sample = df_sample_filt['id']
+    print(f"Number of sequences in the dataset: {len(df_sample_filt)}")
+
+
+
+
+# print(f"Number of sequences in the dataset: {len(df_sample_filt)}")
 
 
 
 """  ** Run Vicinity analysis ** """
 
-max_neighbors = 1000 # This is the maximum number of neighbors you're interested in
+max_neighbors = 2000 # This is the maximum number of neighbors you're interested in
 part1 = np.arange(2, 304, 4)  # check in detail first 300 NN
 part2 = np.arange(350, max_neighbors+1, 50)  # Second part: numbers from 300 to 1000 with steps of 50
 neighbor_numbers = np.concatenate((part1, part2))
@@ -203,48 +357,117 @@ vicinity_analysis_instance = Vicinity_analysis(df,
                                                 metric= chosen_metric,
                                                 parallel= parallel_choice,
                                                 skip_KNN=skip_knn)
-vicinity_analysis_instance.run_analysis()  # This populates the necessary attributes
+vicinity_analysis_instance.run_analysis()       # This populates the necessary attributes
 
 vicinity_analysis_instance.label_results
 
-#ED_radius = range(7, 25)  # Define your Euclidia12
-#n distance radius to check -- should work for AB2
-if chosen_metric == "cosine":
-    ED_radius= np.arange(0,0.01,0.001)
 
-print(ED_radius)
-percentages_results, res_df, mean_num_points, LD1_res, LD2_res = vicinity_analysis_instance.perc_Euclidian_radius(ED_radius)
+
+
+# Run Vicinity Radius
+percentages_results,perc_df, res_df, mean_num_points, LD1_res, LD2_res = vicinity_analysis_instance.perc_Euclidian_radius(ED_radius)
 tmp_ed_sum=vicinity_analysis_instance.summary_results 
+# Run Adjacency matrix
+# density_thresholds= [0.001,0.002, 0.003, 0.004,0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
+
+knn_density_thr=[10, 50, 100, 500, 1000]
+knn_density_thr=[10]
+density_thresholds=[]
+for i in knn_density_thr:
+    density_thresholds.append(vicinity_analysis_instance.NN_dist[:,i].mean())
+    print(f"Computed density  thresholds knn = {knn_density_thr}: {density_thresholds}")
+
+lin0_density_thr=[vicinity_analysis_instance.lin_density_thresholds.tolist()[0]]
+#7 evenly spaced thresholds acrosse the 0.01 and 0.95 quantiles of the distances
 
 
-# ----------------- Save vicinity results ------
+LD_thr =[]
+for thr in [1,2]:
+    mask = (vicinity_analysis_instance.NN_lev[:, 1:] <= thr)
+    mean_val = np.mean(vicinity_analysis_instance.NN_dist[:, 1:][mask])
+    print(f"Mean NN_dist value where NN_lev <= {thr}:", mean_val)
+    LD_thr.append(mean_val)
+
+
+density_thresholds = density_thresholds + lin0_density_thr + LD_thr  #choose the lin0 - the first threshold
+print(f"Computing adjancey for the following density thresholds: {density_thresholds}")
+adjacency_matrices = vicinity_analysis_instance.compute_adjacency_matrices( density_thresholds)
+
+# Save the results
 ED_filename= f"{result_folder}summary_results_ED_{analysis_name}.csv"
-if args.save_results:
-    vicinity_analysis_instance.save_to_pickle(f"{result_folder}Vicinity_{analysis_name}.pkl")
     
 vicinity_analysis_instance.summary_results.to_csv(ED_filename)
+perc_df.to_csv(f"{result_folder}_raw_perc_ED_{analysis_name}.csv")
+for i, matrix in enumerate(adjacency_matrices):
+    # Format the current density to 4 decimals without the decimal point
+    reformat_density = format_density(density_thresholds[i], precision=4)
+
+    # Check if the next density value (if it exists) formats to the same string at 4 decimal places.
+    if i + 1 < len(density_thresholds) and reformat_density == format_density(density_thresholds[i+1], precision=4):
+        # Increase precision to 5 if needed.
+        reformat_density = format_density(density_thresholds[i], precision=5)
+    if i < len(knn_density_thr):
+        nn_info = knn_density_thr[i]
+        matrix_name = f"{result_folder}adjacency_matrix_NN{nn_info}_R{reformat_density}_{analysis_name}.npz"
+        adjacency_to_csv(matrix, f"{result_folder}neighbors_diag_NN{nn_info}_R{reformat_density}_{analysis_name}.csv")
+    elif i < len(knn_density_thr) + len(lin0_density_thr):
+        lin_info = i - len(knn_density_thr)
+        matrix_name = f"{result_folder}adjacency_matrix_lin{lin_info}_R{reformat_density}_{analysis_name}.npz"
+        adjacency_to_csv(matrix, f"{result_folder}neighbors_diag_lin{lin_info}_R{reformat_density}_{analysis_name}.csv")
+    else:
+        ld_info = i - len(knn_density_thr) - len(lin0_density_thr)
+        matrix_name = f"{result_folder}adjacency_matrix_LD{ld_info}_R{reformat_density}_{analysis_name}.npz"
+        adjacency_to_csv(matrix, f"{result_folder}neighbors_diag_LD{ld_info+1}_R{reformat_density}_{analysis_name}.csv")
+    print(f"Adjacency matrix saved at {matrix_name}")
+# save index mapping
+
+# Merge the 'id' and 'sequence_id' columns from the vicinity analysis DataFrame with the sampled id indices,
+# then save the merged DataFrame as a CSV file for later reference.
+pd.merge(vicinity_analysis_instance.df[['id','sequence_id']],
+         pd.DataFrame({'id': id_index_sample.reset_index(drop=True)}),
+         on='id', how='inner').to_csv(f"{result_folder}index_sequence_id_{analysis_name}.csv", index=False)
+
+
+
+
+# ----------------- Save vicinity results Pickle ------
+if args.save_results:
+    vicinity_analysis_instance.save_to_pickle(f"{result_folder}Vicinity_{analysis_name}.pkl")
+
 
 #------ compute the LD distance on a substet as comparator
 np.random.seed(123)
 #function to sample the max numb of sequences if they are below the chosen sample size
-def sample_affinities(df, sample_size, df_affinity_colname ='affinity'):
-    np.random.seed(123)
-    df['affinity']=df[df_affinity_colname]
-    # Check the maximum available samples for each affinity
-    count_per_affinity = df['affinity'].value_counts()
-    # Sample indices for each affinity based on the minimum of available count or the desired sample size
-    sampled_indices = pd.Index([])
-    for affinity, count in count_per_affinity.items():
-        print(affinity)
-        print(count)
-        current_sample_size = min(sample_size, count)  # Adjust the sample size if necessary
-        sampled_indices = sampled_indices.append(df[df['affinity'] == affinity].sample(n=current_sample_size, random_state=42).index)
-    
-    return df.loc[sampled_indices]
+
+
+
+print("LD calculation...")
 
 chosen_sample_size=  args.LD_sample_size
 # chosen_sample_size=  50000 #debug
-LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{chosen_sample_size//1000}k.csv"
+# chosen_sample_size=  25000 #debug
+LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{args.sample_size}k.csv"
+
+if args.LD_matrix != "":
+    print( "Using the LD matrix file at ", args.LD_matrix)
+    LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{(len(id_index_sample))/1000}k.csv"
+    matrix_path = args.LD_matrix
+    d_res1,d_mean1 = prepare_data_for_plotting_LD_MAT(
+        matrix_path,
+        pd.read_csv(args.input_metadata, sep=None),
+        vicinity_analysis_instance.df,
+        # "all",
+        id_index_sample,
+        max_LD=7,
+        junction_aa_col=args.df_junction_colname,
+        affinity_col=args.df_affinity_colname
+    )
+    d_mean1.to_csv(LD_filename)
+    d_res1_long = convert_ld_results_to_long_format(d_res1)
+    d_res1_long.to_csv(f"{result_folder}d_whole_LD_stats_{analysis_name}_{(len(id_index_sample))/1000}k.csv")
+
+
+
 if args.compute_LD == True:
     print('LD computing...')
     rand_100k=sample_affinities(pd.read_csv(args.input_metadata, sep=None), chosen_sample_size, df_affinity_colname).index
