@@ -61,13 +61,13 @@ df_hb = df[df['affinity'] == 'hb']
 df_lb = df[df['affinity'] == 'lb']
 df_mb = df[df['affinity'] == 'mb']
 
-df_hb_1000 = df_hb.sample(n=20000, random_state=123)
-df_lb_1000 = df_lb.sample(n=20000, random_state=123)
-df_mb_1000 = df_mb.sample(n=20000, random_state=123)
+df_hb_1000 = df_hb.sample(n=1200, random_state=123)
+df_lb_1000 = df_lb.sample(n=1200, random_state=123)
+df_mb_1000 = df_mb.sample(n=1200, random_state=123)
 
 
-df_hblbmb_5000 = pd.concat([df_hb_1000, df_lb_1000,df_mb_1000], ignore_index=True)
-id_index_mb= df_hblbmb_5000['id']
+df_hblbmb_3600 = pd.concat([df_hb_1000, df_lb_1000,df_mb_1000], ignore_index=True)
+id_index_mb= df_hblbmb_3600['id']
 
 
 # KNN code Niccolo
@@ -135,7 +135,7 @@ part1 = np.arange(2, 304, 4)  # Includes 300
 part2 = np.arange(350, max_neighbors+1, 50)  # Starts from 350 to avoid duplicating 300
 neighbor_numbers = np.concatenate((part1, part2))
 
-id_index_sample= df_hblbmb_5000['id'] # indexes of 20k each lb mb hb
+id_index_sample= df_hblbmb_3600['id'] # indexes of 1.2k each lb mb hb
 
 
 fractions_results,NN_id,NN_dist, NN_label, NN_lev, ID_labels = calculate_fractions_for_data(df, neighbor_numbers, id_index_sample)
@@ -277,9 +277,9 @@ plt.savefig('violin_correlation_byRow.png')
 
 
 # % of sequences with shared labels at a given distance- LEVENSTHEIN
-num_samples = 60000 # num of sequences to sample
+num_samples = 3600 # num of sequences to sample
 sampled_indices = np.random.choice(df.index, size=num_samples, replace=False)
-sampled_indices=id_index_sample #could also use this one , 20k each hb lb mb
+sampled_indices=id_index_sample #could also use this one , 1.2k each hb lb mb
 #prep array for results
 lev_array= np.zeros((num_samples, 15))
 
@@ -746,9 +746,9 @@ part1 = np.arange(2, 304, 4)  # check in detail first 300 NN
 part2 = np.arange(350, max_neighbors+1, 50)  # Second part: numbers from 300 to 1000 with steps of 50
 neighbor_numbers = np.concatenate((part1, part2))
 
-id_index_sample= df_hblbmb_5000['id'] # indexes of 20k each lb mb hb
+id_index_sample= df_hblbmb_3600['id'] # indexes of 1.2k each lb mb hb
 
-#runnin on the sampled 60k vertex, whole dataset
+#runnin on the sampled 3.6k vertex, whole dataset
 # fractions_results,NN_id,NN_dist, NN_label, NN_lev, ID_labels = calculate_fractions_for_data(df, neighbor_numbers, id_index_sample)
 
 #runnin on the WHOLE dataset
@@ -1042,7 +1042,7 @@ def generate_plots(df_combined):
         g.set_axis_labels("LD Type", "Value")
         plt.subplots_adjust(top=0.9)
         plt.tight_layout()
-        plt.savefig(f'FACET_perc_id_givenLD_{affinity}_n{60000}_200_with_LD_averages_NaNs_percentage22.png')
+        plt.savefig(f'FACET_perc_id_givenLD_{affinity}_n{3600}_200_with_LD_averages_NaNs_percentage22.png')
         plt.close()       
         
 # Note: Compute_levenshtein function should be defined or imported before using the prepare_data_for_plotting.
