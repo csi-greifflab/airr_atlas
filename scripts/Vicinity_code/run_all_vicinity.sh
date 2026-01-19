@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Define the parameters for each combination
-models=("antiberta2" "esm2")
-# chains=("full_chain" "cdr3_only")
-chains=("cdr3_pooled" "paired_chain" "all_cdrh")
+models=("esm2" "antiberta2")
+# chains=("cdr3_only")
+chains=("cdr3_pooled")
+# chains=("cdr3_only" "full_chain" "cdr3_pooled" "paired_chain" "all_cdrh")
 layers=$(seq 0 32)  # Bash doesn't have range, using seq to create a range from 0 to 32 (for layers 0 to 32)
 
 # Input metadata and precomputed LD
@@ -18,6 +19,7 @@ df_junction_colname="cdr3_aa"
 df_affinity_colname="binding_label"
 sample_size=0
 LD_sample_size=10000
+chosen_metric="cosine"
 
 # Set max number of parallel jobs
 max_parallel_jobs=20
@@ -40,7 +42,8 @@ for model in "${models[@]}"; do
         "--input_metadata" "$input_metadata"
         "--input_embeddings" "$input_embeddings"
         "--input_idx" "$input_idx"
-        "--save_results" 
+        # "--save_results"
+        "--chosen_metric" "$chosen_metric"
         "--precomputed_LD" "$precomputed_LD"
         "--result_dir" "$result_dir"
         "--plot_results" 

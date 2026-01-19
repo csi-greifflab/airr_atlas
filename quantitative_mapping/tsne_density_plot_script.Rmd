@@ -1,0 +1,931 @@
+---
+title: "tsne_density_plot"
+output: html_document
+date: "2025-10-27"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr , lib.loc = "/doctorai/niccoloc/libR2")
+library(ggplot2 , lib.loc = "/doctorai/niccoloc/libR2")
+library(stringr , lib.loc = "/doctorai/niccoloc/libR2")
+library(patchwork , lib.loc = "/doctorai/niccoloc/libR2")
+library(data.table , lib.loc = "/doctorai/niccoloc/libR2")
+library(viridis , lib.loc = "/doctorai/niccoloc/libR2")
+# library(Peptides, lib.loc= "/doctorai/niccoloc/libR")
+library(foreach, lib.loc= "/doctorai/niccoloc/libR2")
+# library(scico, lib.loc= "/doctorai/niccoloc/libR2")
+# library(BiocManager , lib.loc= "/doctorai/niccoloc/libR2")
+# library(seqinr , lib.loc= "/doctorai/niccoloc/libR2")
+library("labeling", lib.loc= "/doctorai/niccoloc/libR2")
+library("isoband", lib.loc= "/doctorai/niccoloc/libR2")
+library("tidyr", lib.loc= "/doctorai/niccoloc/libR2")
+library("ggrepel", lib.loc= "/doctorai/niccoloc/libR2")
+library("RColorBrewer", lib.loc= "/doctorai/niccoloc/libR2")
+library("scico", lib.loc= "/doctorai/niccoloc/libR2")
+library("farver", lib.loc= "/doctorai/niccoloc/libR2")
+library("withr", lib.loc= "/doctorai/niccoloc/libR2")
+library("purrr", lib.loc= "/doctorai/niccoloc/libR2")
+```
+
+```{r density functions }
+
+
+compute_density <- function(data, xrange = NULL, yrange = NULL, n = 100) {
+  if (is.null(xrange)) xrange <- range(data$umap_1)
+  if (is.null(yrange)) yrange <- range(data$umap_2)
+  
+  kde <- MASS::kde2d(data$umap_1, data$umap_2, n = n, lims = c(xrange, yrange))
+  density_df <- expand.grid(umap_1 = kde$x, umap_2 = kde$y)
+  density_df$density <- as.vector(kde$z)
+  density_df$ndensity <- density_df$density / max(density_df$density)
+  
+  
+  
+  density_df
+}
+
+compute_grouped_density <- function(data, group_col = "specificity", n = 100) {
+  
+  # Compute overall xrange/yrange for the dataset
+  xrange <- range(data$umap_1)
+  yrange <- range(data$umap_2)
+  
+  data %>%
+    group_by(across(all_of(group_col))) %>%
+    group_modify(~compute_density(.x, xrange = xrange, yrange = yrange, n = n)) %>%
+    ungroup()
+}
+
+
+```
+
+#figure 3 B
+
+```{r new Ireceptor Data + Ag spec}
+
+df1=fread("/doctorai/niccoloc/vae_umap_dfs/tsne_ireceptor_esm2_PGEN.csv") 
+
+
+tsne_df_irecp=bind_rows(
+  fread("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_esm2.csv") %>% mutate(model = 'esm2'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_ab2.csv") %>% mutate(model = 'ab2'),
+  
+  fread('/doctorai/niccoloc/vae_umap_dfs/tsne_POST_1M_ab2_NEW.csv') %>%
+    mutate(model = 'ab2', specificity = 'prepost') %>%
+    select(sequence_id, umap_1, umap_2, pgen, model, specificity,ppost, Q, junction_aa= amino_acid, v_gene, j_gene),
+  
+  fread('/doctorai/niccoloc/vae_umap_dfs/tsne_POST_1M_esm2_NEW.csv') %>%
+    mutate(model = 'esm2', specificity = 'prepost')%>%
+    select(sequence_id, umap_1, umap_2, pgen, model, specificity,ppost, Q,junction_aa= amino_acid,v_gene ,j_gene), ) %>% 
+  mutate(junction_aa_length= str_length(junction_aa),
+         specificity = ifelse(str_detect(sequence_id, "^pre"),"preselection",
+                                            ifelse(str_detect(sequence_id, "^post"),"postselection",
+                                                          specificity)))
+
+tsne_df_tz=bind_rows(
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_tz_esm2_NEW.csv") %>%
+    mutate(model = 'esm2',specificity=binding_label),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_tz_ab2_NEW.csv") %>%
+    mutate(model = 'ab2',specificity=binding_label),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_porebski_ab2_NEW.csv") %>%
+    mutate(model = 'ab2', label= 'porbeski',specificity=binding_label) %>% filter(binding_label =='hb'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_porebski_esm2_NEW.csv") %>%
+    mutate(model = 'esm2', label= 'porbeski',specificity=binding_label)  %>% filter(binding_label =='hb'),
+)
+
+tsne_all = bind_rows(
+  tsne_df_irecp,
+  tsne_df_tz
+)
+Tz_dfs_Dens=compute_grouped_density(bind_rows(
+  tsne_df_irecp  
+  ), c('specificity', 'model')) 
+
+Tz_ALL_Dens_raw=compute_grouped_density(bind_rows(
+  tsne_all
+  # tsne_df_tz
+  ), c('specificity', 'model')) 
+
+ag_N_seqs=
+  bind_rows(tsne_df_irecp,
+            tsne_df_tz)%>% 
+  filter(model=='ab2') %>% 
+  group_by(specificity) %>%
+  summarise(n =n(), .groups='drop') %>% 
+  mutate(specificity2 =case_when(
+                                  specificity == "covid" ~ "SARS-CoV-2 RBD\n",
+                                  specificity == "ebola" ~ "Ebola",
+                                  specificity == "influenza" ~ "Influenza",
+                                  specificity == "postselection" ~ "Post-selection",
+                                  specificity == "hb" ~ "HER2",
+                                  specificity == "TG2+" ~ "TG2",
+                                  specificity == "malaria" ~ "Malaria",
+                                  .default = specificity
+                                  ),
+         n= ifelse(specificity == "Post-selection","1M", n),
+         # specificity = ifelse(specificity == "postselection", "prepost" ,specificity),
+         spec_label=str_c(specificity2, " (", n, ")"),
+         spec_label = ifelse(spec_label == "Post-selection (1000000)", "Post-selection\nsimulated (1M)",spec_label))
+
+Tz_ALL_Dens= Tz_ALL_Dens_raw %>% 
+  left_join(ag_N_seqs %>% select(-n), by = "specificity")  
+
+
+
+
+
+  # Get viridis colors
+cols <- viridisLite::viridis(10, begin = 0.15)
+
+# Replace the first color with white
+cols[1] <- "#FFFFFF"
+
+p_ag_spec= ggplot(Tz_dfs_Dens %>%
+          filter(specificity == "ireceptor" ) %>%  ungroup() %>%
+            dplyr::select(umap_1, umap_2, ndensity, model)%>% 
+                        mutate (model = toupper(model) )
+         , aes(umap_1, umap_2, z = ndensity)) +
+geom_contour_filled(data = Tz_ALL_Dens %>% filter(specificity != "ireceptor" ,
+                                                    specificity !='preselection',
+                                                    specificity != "lb",
+
+                                                    ) %>% 
+                        mutate (model = toupper(model))
+                     , aes(umap_1, umap_2,z =ndensity,
+                           ), inherit.aes = FALSE, alpha=0.8) +
+  geom_contour(
+    color = "black", linewidth = 0.2     ,bins= 8  )+
+  facet_grid(  model  ~spec_label, scales = "free" ) +
+  labs(title = paste("Normalized denisties of Ag-specific Abs projected on iReceptor background"),
+       x = "tSNE 1", y = "tSNE 2", scales= "free") +
+    theme_bw()+
+    theme(strip.background = element_rect(fill = "white"))+
+  # scale_fill_viridis_d( option = 'viridis' , begin=0.15)   
+scale_fill_manual(
+  values = cols,
+  name = "Normalized Density"
+)
+p_ag_spec
+
+
+save(p_ag_spec , file = "/doctorai/niccoloc/vae_umap_dfs/p_ag_spec.rds")
+download_rstudio_file( "/doctorai/niccoloc/vae_umap_dfs/p_ag_spec.rds",
+                       "p_ag_spec.rds")
+
+
+
+```
+
+
+
+#figure 3 C
+
+
+
+```{r Density diff plot}
+
+tsne_df_irecp=bind_rows(
+  fread("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_esm2.csv") %>% 
+    mutate(model = 'esm2', binding_label= 'ireceptor'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_ab2.csv") %>% 
+    mutate(model = 'ab2', binding_label= 'ireceptor')
+)
+
+tsne_df_tz=bind_rows(
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_tz_esm2_NEW.csv") %>%
+    mutate(model = 'esm2',label= 'tz'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_tz_ab2_NEW.csv") %>%
+    mutate(model = 'ab2',label= 'tz'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_porebski_ab2_NEW.csv") %>%
+    mutate(model = 'ab2', label= 'porbeski'),
+  fread("/doctorai/niccoloc/vae_umap_dfs/tsne_porebski_esm2_NEW.csv") %>%
+    mutate(model = 'esm2', label= 'porbeski')
+)
+
+
+
+
+
+
+umap_df = 
+bind_rows(
+  tsne_df_tz ,
+  tsne_df_irecp %>% filter(specificity == "ireceptor") %>%
+    mutate( label="ireceptor", binding_label='')
+  ) %>% select(
+    umap_1, umap_2, model, binding_label,label
+  ) %>%
+  mutate(binding_label = paste0(binding_label,"_",label),
+         umap_1 = ifelse(!is.na(umap_1), umap_1, umap1),
+         umap_2 = ifelse(!is.na(umap_2), umap_2, umap2))
+
+table(tsne_df_tz$binding_label)
+table(umap_df$binding_label,umap_df$model)
+
+library("scico", lib.loc= "/doctorai/niccoloc/libR2")
+library(tidyr)
+# library(MASS)
+
+fwrite(umap_df, "/doctorai/niccoloc/umap_df_density_diff_x_giulio.csv")
+
+# Function to compute background density
+compute_background_density <- function(data, x_var, y_var, label_var, target_label, n = 100) {
+  # Filter data for the target label (e.g., "ireceptor")
+  background_data <- data %>% filter(!!sym(label_var) == target_label)
+  
+  # Extract x and y values for the background
+  x_values <- background_data[[x_var]]
+  y_values <- background_data[[y_var]]
+  
+  # Compute 2D kernel density estimation
+  density <- MASS::kde2d(x_values, y_values, n = n) 
+  
+  # Convert the density result into a tidy data frame
+  density_df <- as.data.frame(expand.grid(x = density$x, y = density$y))
+  density_df$density <- as.vector(density$z)/ max(as.vector(density$z))
+  
+  density$z = density$z / max( density$z)
+
+  return(density)
+}
+
+
+# Example usage of the function
+background_density_esm2 <- compute_background_density(
+  data = umap_df %>% filter(binding_label == "_ireceptor", model=='esm2'),
+  x_var = "umap_1",
+  y_var = "umap_2",
+  label_var = "label",
+  target_label = "ireceptor",
+  n = 100
+)
+background_density_ab2 <- compute_background_density(
+  data = umap_df %>% filter(binding_label == "_ireceptor", model=='ab2'),
+  x_var = "umap_1",
+  y_var = "umap_2",
+  label_var = "label",
+  target_label = "ireceptor",
+  n = 100
+)
+
+
+
+geom_compare_density <- function(group1, group2, background_density,
+                                 # xlim = c(-2.5, 15), ylim = c(-5, 10),
+                                 n = 100, bins = 5, binwidth = 0.001,
+                                 palette = "vik", fill_limits = c(-1, 1),model_name=NA,label_name= NA, use_integral= FALSE,
+                                 ...) {
+  
+  # Determine common x and y ranges
+  xrng <- range(c(group1$x, group2$x ))
+  yrng <- range(c(group1$y, group2$y ))
+  print(paste0("X range: ", paste(round(xrng, 2), collapse = " to ")))
+  print(paste0("Y range: ", paste(round(yrng, 2), collapse = " to ")))  
+  print("Including background density in range calculation...")
+  xrng <- range(c(group1$x, group2$x,background_density$x))
+  yrng <- range(c(group1$y, group2$y,background_density$y))
+  print(paste0("X range: ", paste(round(xrng, 2), collapse = " to ")))
+  print(paste0("Y range: ", paste(round(yrng, 2), collapse = " to ")))
+  
+  # Calculate the 2D density estimates
+  d1 <- MASS::kde2d(group1$x, group1$y, lims = c(xrng, yrng), n = n)
+  d2 <- MASS::kde2d(group2$x, group2$y, lims = c(xrng, yrng), n = n)
+  
+  # Normalize densities
+  d1$z <- d1$z / max(d1$z)
+  d2$z <- d2$z / max(d2$z)
+  
+  
+  if( use_integral) {
+    normalize_density <- function(d) {
+    dx <- diff(d$x[1:2])
+    dy <- diff(d$y[1:2])
+    d$z <- d$z / sum(d$z * dx * dy)
+    d
+  }
+  
+  d1 <- normalize_density(d1)
+  d2 <- normalize_density(d2)
+  # Compute difference between densities
+  }
+  diff_z <- d2$z - d1$z
+  
+  print( max(diff_z))
+  
+  # Create a grid of x and y values
+  grid_df <- expand.grid(x = d1$x, y = d1$y)
+  
+  # Add the difference values
+  diff_df <- data.frame(
+    x = grid_df$x,
+    y = grid_df$y,
+    Difference = as.vector(diff_z)
+  )
+  diff_df$model_name <- model_name
+  diff_df$label_name <- label_name
+  # Prepare background density data
+  # Assuming background_density is a list with x, y, z from kde2d
+  background_grid <- expand.grid(x = background_density$x, y = background_density$y)
+  background_df <- data.frame(
+    x = background_grid$x,
+    y = background_grid$y,
+    z = as.vector(background_density$z)
+  )
+  
+  # Create the ggplot layers
+  list(
+    # Raster layer for density difference
+    geom_raster(data = diff_df, aes(x = x, y = y,
+                                    fill  = Difference,
+                                    alpha = (round(Difference,5) !=0)
+                                    )
+                ,
+                interpolate = TRUE, ...),
+    
+    # Contour lines for background density
+    geom_contour(data = background_df, aes(x = x, y = y, z = z,color = "iReceptor"),
+                    linewidth = 0.5),
+    # Contour lines colored by level for density difference
+    # stat_contour(data = diff_df, aes(x = x, y = y, z = Difference, colour = ..level..),
+    #             binwidth = binwidth),
+    # Color scale for fill
+    scico::scale_fill_scico(
+      palette    = palette,
+      midpoint   = 0,
+      name       = "HB–LB\nDensity\nDifference",
+      # limits     = c(-0.3, 0.3),
+      oob        = scales::squish
+    ),
+    # Color scale for contour lines
+    scale_color_manual(values = "black", name = "Background density"),
+    scale_alpha_manual(
+      values = c("TRUE"  = 1,         # fully opaque where Difference ≠ 0
+                  "FALSE" = 0)     ),      # fully transparent where Difference == 0
+    # Coordinate limits
+    # coord_cartesian(xlim = xlim, ylim = ylim),
+    # Hide the color legend for contour lines if desired
+    guides(  alpha = F),
+    labs( color = "iReceptor \nbackground density")
+  )
+}
+
+
+# Create a test the plot
+ggplot() +
+
+  geom_compare_density(
+    umap_df %>% filter(binding_label == "lb_porbeski", model=='esm2') %>% mutate(x=umap_1,y=umap_2) ,
+    umap_df %>% filter(binding_label == "hb_porbeski", model=='esm2') %>% mutate(x=umap_1,y=umap_2),
+    background_density_df) +
+  labs(title = "Comparison of Density Between hb and lb",
+       x = "X-axis",
+       y = "Y-axis") +
+  theme_minimal()
+
+background_density_df=background_density_esm2
+  
+  
+  
+
+library(patchwork) # For combining plots
+
+# Define the models, binding labels, and their corresponding background densities
+models <- c( "ab2",   "esm2" )
+background_densities <- list(
+  esm2 = background_density_esm2,
+  ab2 = background_density_ab2
+)
+
+binding_labels <- list(
+  hb = c( "hb_tz","hb_porbeski" ),
+  lb = list(
+        c("lb_tz"),
+    c("lb_porbeski", "non-binder_porbeski")
+
+  )
+)
+
+
+datasets= c(
+  "Trastuzumab",
+  "Porebski"
+)
+
+# Initialize a list to store plots
+plot_list <- list()
+
+
+# Create ggplots objects using a for loop
+counter <- 1
+df_list=data.frame()
+bg_list=data.frame()
+
+for (model in models) {
+  # Select the background density for the current model
+  background_density <- background_densities[[model]]
+  
+  for (i in seq_along(binding_labels$hb)) {
+    hb_label <- binding_labels$hb[[i]]
+    lb_labels <- binding_labels$lb[[i]]
+    model_chosen <- model
+    dataset_name <- datasets[[i]]
+    # Generate the plot
+
+    x1 =geom_compare_density(
+        umap_df %>%
+          filter(binding_label %in% lb_labels, model == model_chosen) %>%
+          mutate(x = umap_1, y = umap_2),
+        umap_df %>%
+          filter(binding_label == hb_label, model == model_chosen) %>%
+          mutate(x = umap_1, y = umap_2),
+        use_integral= TRUE,
+        background_density,
+        model_name =  model_chosen,
+        label_name = dataset_name)
+    
+    diff_data=x1[[1]][["data"]]
+    bg_data =x1[[2]][["data"]]
+    bg_data$model_name =model_chosen
+    bg_data$label_name =dataset_name
+    
+    df_list= bind_rows(df_list,diff_data)  
+    bg_list = bind_rows(bg_list,bg_data)
+
+  }
+}
+
+df_choice= "Porebski"
+df_choice= "Trastuzumab"
+model_choice="ab2"
+model_choice="esm2"
+
+# 3) Single faceted plot:
+ggplot( ) +
+  geom_raster(
+    data = df_list %>% filter( label_name ==  df_choice, model_name==model_choice)  ,
+
+    aes(x = x, y = y,
+        fill  = Difference,
+        alpha = (round(Difference,4) !=0)
+        ),
+                interpolate = TRUE,) +
+  geom_contour(
+    data    = bg_list %>% filter( label_name == df_choice, model_name==model_choice),              # your long-form background
+    aes(x = x, y = y,z = z, color   = "iReceptor"),
+     # breaks = pretty(bg_list$z),
+    color = "black", linewidth = 0.2, bins=8
+  ) +
+  scico::scale_fill_scico(
+    palette  = "vik",
+    midpoint = 0,
+    # limits   = c(-0.5, 0.5), #not too extreme values
+    # oob      = scales::squish,
+    name     = "HB–LB\nDensity\nDifference"
+  ) +
+  scale_color_manual(values = "black", name = "Background density")+
+  scale_alpha_manual(
+      values = c("TRUE"  = 1,         # fully opaque where Difference ≠ 0
+                  "FALSE" = 0)     )+      # fully transparent where Difference == 0
+    guides(  alpha = F)+
+
+  facet_grid(
+    rows = vars(model_name),
+    cols = vars(label_name),scales= "free",
+    labeller = as_labeller(c(
+                ab2 = "AB2", esm2 = "ESM2",
+                Trastuzumab = "HER2 Chinery", Porebski= "HER2 Porebski"))
+  ) +
+  labs(
+    x     = "tSNE 1",
+    y     = "tSNE 2",
+    # title = "High- vs. Low-Binder Density Difference on background tSNE of iReceptor HCDR3",
+        color = "iReceptor \nbackground density"
+  ) +
+  theme_bw()  +
+  ylim(-120,120)+
+  theme(strip.background =element_rect(fill="white"))
+final_plot = last_plot()
+final_plot
+#save final plot as r object
+
+save(final_plot, file = "/doctorai/niccoloc/figures/airr_atlas/density_DIFF_plot.rds")
+
+download_rstudio_file <- function(filepath, download_name = NULL, host = "http://localhost:8787") {
+  if (is.null(download_name)) {
+    download_name <- basename(filepath)
+  }
+  
+  url <- sprintf(
+    "%s/export/%s?name=%s&file=%s",
+    host,
+    download_name,
+    download_name,
+    URLencode(filepath)
+  )
+  
+  if (.Platform$OS.type == "windows") {
+    shell(sprintf('start "" "%s"', url), wait = FALSE)
+  } else if (Sys.info()[["sysname"]] == "Darwin") {
+    system(sprintf('open "%s"', url), wait = FALSE)
+  } else {
+    system(sprintf('xdg-open "%s"', url), wait = FALSE)
+  }
+  
+  message("✅ Download triggered in your browser for: ", download_name)
+}
+
+download_rstudio_file(
+  "/doctorai/niccoloc/figures/airr_atlas/density_DIFF_plot.rds",
+  "density_DIFF_plot.rds",
+)
+
+
+
+save(final_plot, file = paste("/doctorai/niccoloc/figures/airr_atlas/density_DIFF_plot_",df_choice,".rds", sep=""))
+
+download_rstudio_file(
+  paste("/doctorai/niccoloc/figures/airr_atlas/density_DIFF_plot_",df_choice,".rds", sep=""),
+  paste("density_DIFF_plot_",df_choice,".rds", sep=""),
+)
+
+
+
+
+print(plot_list[1])
+print(final_plot)
+
+# Optionally save the combined plot
+ggsave("/doctorai/niccoloc/figures/airr_atlas/density_DIFF_plot.png", plot = final_plot,width =10, height =6.25, units = "in", dpi = 300)
+  
+
+
+
+#magnitude estimation
+
+dif1=df_list %>% filter( label_name ==  'Porebski', model_name== 'ab2')  
+dif2=df_list %>% filter( label_name ==  'Porebski', model_name== 'esm2')
+
+dif3=df_list %>% filter( label_name ==  'Trastuzumab', model_name== 'ab2')
+dif4=df_list %>% filter( label_name ==  'Trastuzumab', model_name== 'esm2')
+
+sum(abs(dif1$Difference))
+sum(abs(dif2$Difference))
+
+sum(abs(dif3$Difference))
+sum(abs(dif4$Difference))
+
+
+max(abs(dif1$Difference))
+max(abs(dif2$Difference))
+
+max(abs(dif3$Difference))
+max(abs(dif4$Difference))
+  
+```
+
+
+#figure 3's supplementary
+
+
+
+```{r supplementary HB vs BACKGROUND}
+counter <- 1
+df_list=data.frame()
+bg_list=data.frame()
+
+binding_labels_list = unlist(binding_labels)
+dataset_list = c('tz','pb','tz','pb','pb')
+
+for (model in models) {
+  # Select the background density for the current model
+  background_density <- background_densities[[model]]
+  
+  for (i in seq_along(binding_labels$hb)) {
+    hb_label <- binding_labels_list[i]
+    lb_labels <- binding_labels$lb[[i]]
+    model_chosen <- model
+    dataset_name <- dataset_list[[i]]
+    # Generate the plot
+
+    x1 =geom_compare_density(
+        umap_df %>%
+          filter(binding_label == '_ireceptor', model == model_chosen) %>%
+          mutate(x = umap_1, y = umap_2),
+        umap_df %>%
+          filter(binding_label == hb_label, model == model_chosen) %>%
+          mutate(x = umap_1, y = umap_2),
+        background_density,
+        model_name =  model_chosen,
+        label_name = dataset_name)
+    
+    diff_data=x1[[1]][["data"]]
+    bg_data =x1[[2]][["data"]]
+    bg_data$model_name =model_chosen
+    bg_data$label_name =dataset_name
+    
+    df_list= bind_rows(df_list,diff_data)  
+    bg_list = bind_rows(bg_list,bg_data)
+
+  }
+}
+
+
+
+
+
+  background_grid <- expand.grid(x = background_densities[['esm2']]$x, y = background_densities[['esm2']]$y)
+  background_df1 <- data.frame(
+    x = background_grid$x,
+    y = background_grid$y,
+    z = as.vector(background_densities[['esm2']]$z),
+    model = 'esm2'
+  )
+  background_grid <- expand.grid(x = background_densities[['ab2']]$x, y = background_densities[['ab2']]$y)
+  background_df2 <- data.frame(
+    x = background_grid$x,
+    y = background_grid$y,
+    z = as.vector(background_densities[['ab2']]$z),
+    model = 'ab2'
+  )
+
+background_df=  bind_rows(background_df1,background_df2)
+
+
+
+#group lb_porbeski and lb_porbski as single label
+umap_df = umap_df %>%
+  mutate(binding_label = ifelse(binding_label == "non-binder_porbeski", "lb_porbeski", binding_label))
+
+# 3) Single faceted plot:
+ggplot( ) +
+  geom_density_2d_filled(
+    data = umap_df %>%
+          filter(binding_label != '_ireceptor')%>%
+          mutate(x = umap_1, y = umap_2,) ,
+
+    aes(x = x, y = y),contour_var = "ndensity", bins = 100, show.legend = F)+
+  geom_contour(
+    data    = background_df,              # your long-form background
+    aes(x = x, y = y,z = z, color   = "iReceptor"),
+     bins = 5, size = 0.3
+  ) +
+  scale_fill_viridis_d(option = "inferno", direction = -1 )+
+  # scico::scale_fill_scico(
+  #   palette  = "vik",
+  #   midpoint = 0,
+  #   limits   = c(-0.3, 0.3),
+  #   oob      = scales::squish,
+  #   name     = "HB–LB\nDensity\nDiff"
+  # ) +
+  scale_color_manual(values = "black", name = "Background density")+
+  # scale_alpha_manual(
+  #     values = c("TRUE"  = 1,         # fully opaque where Difference ≠ 0
+  #                 "FALSE" = 0)     )+      # fully transparent where Difference == 0
+  # 
+  #   guides(  alpha = F)+
+ 
+  facet_grid(
+    rows = vars(model),
+    cols = vars(binding_label),
+    # labeller = as_labeller(c(
+    #             ab2 = "AntiBERTa2", esm2 = "ESM2",
+    #             Trastuzumab = "Trastuzumab", Porebski= " Porebski"))
+  ) +
+  labs(
+    x     = "UMAP 1",
+    y     = "UMAP 2",
+    # title = "Hb vs Lb Difference of distribution density: Hb vs Lb Across Models & Labels on iReceptor - Pooled CDRH3",
+    title = "High- vs. Low-Binder Density Difference on background UMAP of iReceptor CDRH3",
+    # title = "Differential density of high- and low-Affinity binders projected on UMAP of CDRH3 iReceptor background",
+        color = "iReceptor \nbackground density"
+  ) +
+    scale_alpha_manual(
+      values = c("TRUE"  = 1,         # fully opaque where Difference ≠ 0
+                  "FALSE" = 0)     )+  
+  theme_bw()  +
+  theme(strip.background =element_rect(fill="white"))
+
+
+
+ 
+supp_dens=ggplot() +
+  stat_density_2d(
+    data = umap_df %>%
+      filter(binding_label != '_ireceptor') %>%
+      mutate(x = umap_1, y = umap_2,
+             binding_label = factor(binding_label,
+                                    levels = c( "lb_tz", "hb_tz","hb_porbeski", "lb_porbeski" ),
+                                    labels = c("Low-Binder Chinery", "High-Binder Chinery",
+                                               "High-Binder Porebski", "Low-Binder Porebski"),
+                                    )
+             
+             
+             ),
+    aes(
+      x = x,
+      y = y,
+      fill = after_stat(ndensity),
+      alpha = after_stat(ndensity >= 0.01)
+    ),
+    geom = "raster",
+    contour = FALSE,
+    bins = 100,
+    n = 300 
+  ) +
+  geom_contour(
+    data = background_df,
+    aes(x = x, y = y, z = z, color = "iReceptor"),
+    bins = 5, size = 0.3
+  ) +
+  scale_fill_viridis_c(option = "inferno", direction = -1) +
+  scale_alpha_manual(values = c("TRUE" = 1, "FALSE" = 0), guide = FALSE) +
+  scale_color_manual(values = "black", name = "Background density") +
+  facet_grid(
+    rows = vars(model),
+    cols = vars(binding_label),
+    labeller = as_labeller(c(
+      ab2 = "AB2", esm2 = "ESM2" ,
+      "Low-Binder Chinery" = "LB Chinery",
+      "High-Binder Chinery" = "HB Chinery",
+      "High-Binder Porebski" = "HB Porebski",
+      "Low-Binder Porebski" = "LB Porebski"
+  ))
+  )+
+  labs(
+    x = "tSNE 1",
+    y = "tSNE 2",
+    # title = "High- vs. Low-affinity binders density distribution on background tSNE of iReceptor HCDR3",
+    color = "iReceptor \nbackground density",
+    fill = "Normalized Density"
+  ) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+supp_dens
+
+save(supp_dens, file = "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE.rds")
+
+download_rstudio_file(
+  "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE.rds",
+  "density_supp_TSNE.rds",
+)
+
+ 
+x1= fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/porebski/porebski_metadata_vsALL.csv")
+x1= fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/porebski/porebski_metadata.csv")
+
+```
+
+
+
+
+```{r}
+
+
+library(MASS)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(tidyr)
+
+# Parameters
+n <- 100  # grid resolution
+use_integral <- TRUE
+
+# Function to compute normalized 2D KDE for one group
+compute_normalized_kde <- function(df, xrng,yrng, n = 100, use_integral = TRUE  ) {
+  xrng <- range(df$x)
+  yrng <- range(df$y)
+  
+  d <- MASS::kde2d(df$x, df$y, lims = c(xrng, yrng), n = n)
+  
+  if (use_integral) {
+    dx <- diff(d$x[1:2])
+    dy <- diff(d$y[1:2])
+    d$z <- d$z / sum(d$z * dx * dy)
+  }
+  
+  expand.grid(x = d$x, y = d$y) %>%
+    mutate(z = as.vector(d$z))
+}
+
+# Filter and prepare the input data
+umap_filtered <- umap_df %>%
+  filter(binding_label != "_ireceptor") %>%
+  mutate(x = umap_1, y = umap_2)
+
+# Apply KDE per group
+dens_df <- umap_filtered %>%
+  mutate(binding_label2= binding_label,
+         model2=model) %>% 
+  group_by(model2, binding_label2) %>%
+  group_map(~ {
+    kde_df <- compute_normalized_kde(.x, range(umap_filtered$x),range(umap_filtered$y), n = n, use_integral = use_integral)
+    kde_df$binding_label <- unique(.x$binding_label)
+    kde_df$model <- unique(.x$model)
+    # print(.x)
+    kde_df
+  }) %>%
+  bind_rows() %>% ungroup()
+
+# Plot normalized densities per group
+# Plot normalized densities per group
+# dens_df <- dens_df %>%
+#   group_by(binding_label) %>%
+#   mutate(
+#     x = round(x, 4),
+#     y = round(y, 4)
+#   ) %>%
+#   ungroup()
+
+x_poreb=ggplot( ) +
+# x_tz=ggplot( ) +
+# x2222=ggplot( ) +
+  geom_raster(
+    data = dens_df %>% as.data.frame() %>% 
+      # filter( !(binding_label== "hb_porbeski" | binding_label== "lb_porbeski")) %>%
+      filter(  (binding_label== "hb_porbeski" | binding_label== "lb_porbeski")) %>%
+      mutate(
+      binding_label = factor(binding_label,
+                                    levels = c( "lb_tz", "hb_tz","hb_porbeski", "lb_porbeski" ),
+                                    labels = c("Low-Binder Chinery", "High-Binder Chinery",
+                                               "High-Binder Porebski", "Low-Binder Porebski"),
+                                    )),
+
+    aes(x = x, y = y,
+        fill  = z,
+        alpha = (round(z,5) !=0)
+        ),
+                interpolate = TRUE,) +
+
+  geom_contour(
+    data = background_df,
+    aes(x = x, y = y, z = z, color = "iReceptor"),
+    bins = 8, size = 0.3
+  ) +
+  scale_fill_viridis_c(option = "inferno", direction = -1,
+                       
+                       
+                       ) +
+  scale_alpha_manual(values = c("TRUE" = 1, "FALSE" = 0), guide = FALSE) +
+  scale_color_manual(values = "black", name = "Background density") +
+  facet_grid(
+    rows = vars(model),
+    cols = vars(binding_label),
+    labeller = as_labeller(c(
+      ab2 = "AB2", esm2 = "ESM2" ,
+      "Low-Binder Chinery" = "LB Chinery",
+      "High-Binder Chinery" = "HB Chinery",
+      "High-Binder Porebski" = "HB Porebski",
+      "Low-Binder Porebski" = "LB Porebski"
+  ))
+  )+
+  labs(
+    x = "tSNE 1",
+    y = "tSNE 2",
+    # title = "High- vs. Low-affinity binders density distribution on background tSNE of iReceptor HCDR3",
+    color = "iReceptor \nbackground density",
+    fill = "Normalized Density"
+  ) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))
+
+
+x2222
+x3 | x4
+
+x_suppl2= x_tz | x_poreb
+
+save(x_suppl2, file = "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL.rds")
+save(x_tz, file = "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL_ONLYTZ.rds")
+save(x_poreb, file = "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL_ONLYPOREB.rds")
+ 
+download_rstudio_file( 
+  "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL.rds",
+  "density_supp_TSNE_tz_INTEGRAL.rds",
+)
+
+download_rstudio_file(
+  "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL_ONLYTZ.rds",
+  "density_supp_TSNE_tz_INTEGRAL_ONLYTZ.rds",
+)
+
+download_rstudio_file(
+  "/doctorai/niccoloc/figures/airr_atlas/density_supp_TSNE_tz_INTEGRAL_ONLYPOREB.rds",
+  "density_supp_TSNE_tz_INTEGRAL_ONLYPOREB.rds",
+)
+  
+  
+  
+  
+  
+  
+  
+```
+

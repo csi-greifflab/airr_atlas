@@ -16,6 +16,9 @@ from scipy.sparse.csgraph import laplacian
 vicinity_100k_4000knn=vicinity_analysis_instance
 
 
+
+
+
 def compute_adjacency_matrices(vicinity_instance, density_thresholds):
     """
     Computes sparse adjacency matrices for each density threshold.

@@ -69,19 +69,7 @@ def analyze_neighbors(instance, indices, n, id_affinity_label):
 
 
 class Vicinity_analysis:
-    # TO DO:
-    #---------!!!!!!!!!!!! add the summary resut  from euclidian radius to the save_pickle and load_from_pickle methods !!!!!!!!
-    # - Add Marina and Evgenii types of anaylsis
-    # - Add Marina and Evgenii plots
-    # - uniform data structures or think of a uniform new one (like the multidim array)
-    # - If slow, implement multi threading
-    # - sparsity normalization
-    # - calling the umap script to get the xy coordinates (if it's not too difficult to implement)
-    # GITHUB
-    # - whatever you think could  be useful :)
-    
-    
-    
+
     def __init__( self, df,embeddings,neighbor_numbers,id_index, colname_affinity='affinity', colname_junction='junction_aa', metric= "euclidean"  ,parallel=False , skip_KNN = False):
         self.df=df
         self.embedding= embeddings
@@ -91,11 +79,8 @@ class Vicinity_analysis:
         self.metric = metric
         self.parallel= parallel
         self.skip_neighbors_analysis = skip_KNN
-        # self.neigh = NearestNeighbors()
-        # self.neigh.fit(list(self.df['embedding']))
         self.id_index=id_index
         print(f"Analysis initialized for index {len(id_index)} with neighbor numbers: {neighbor_numbers}, Parellelization= {parallel}")
-        #self.parameters=  TO DO , PASTe THE INPUT PARAMETERS to have a record of the anaylsis done
     
       
     def run_analysis(self):
@@ -148,199 +133,6 @@ class Vicinity_analysis:
         instance.knn_vicinity = data_loaded.get("knn_vicinity", None)
         return instance
     
-    def calculate_fractions_for_data_bk(self):
-        self.df['affinity']= self.df[self.colname_affinity]
-        self.df['junction_aa']= self.df[self.colname_junction]
-        # Prepare embeddings and query
-        embeddings = np.vstack(self.df['embedding'].values)
-        query_embedding = np.array(self.df.iloc[self.id_index]['embedding'], dtype='float32')  # Extract and convert query embedding
-
-        # Reshape query_embedding to match FAISS input requirements
-        if query_embedding.ndim == 1:  # Ensure it's a single vector
-            query_embedding = query_embedding.reshape(1, -1)
-        # Perform FAISS KNN search
-        distances, indices = faiss_exact_knn(
-            embeddings=embeddings,
-            query_embedding=query_embedding,
-            metric=self.metric,
-            n_neighbors=max(self.neighbor_numbers)
-        )
-
-        # Extract affinity values
-        indices_affinity = self.df.loc[indices, 'affinity'].values
-        indices_affinity_mat = indices_affinity.reshape(-1, max(self.neighbor_numbers))
-
-        id_affinity_label = self.df.loc[self.id_index, 'affinity']
-        fractions_results = []
-        t_lev = time.time()        
-        print("Computing Levenshtein distances...")
-        lev_mat = []
-        # tqdm progress bar for Levenshtein distance computation
-        for idx in tqdm(range(len(self.id_index)), desc="Levenshtein distances"):
-            seq_index = self.id_index[idx]
-            NN_index = indices[idx]
-            lev_mat.append(compute_levenshtein(self.df.iloc[seq_index]['junction_aa'], self.df.iloc[NN_index]['junction_aa']))
-        lev_mat = np.array(lev_mat)
-        print(f' LEV running time {time.time() - t_lev}')
-        
-        if self.skip_neighbors_analysis:
-            print("Skipping Neighbors analysis...")
-            fractions_results = [np.nan] * len(self.neighbor_numbers)
-            tmp_label_res = {label: [np.nan] * len(self.neighbor_numbers) for label in id_affinity_label.unique()}
-            knn_vicinity = np.zeros((len(self.neighbor_numbers), len(self.id_index)))
-            result_labels_df = pd.DataFrame()
-        else:
-            t_NN = time.time()
-            print("Calculating nearest neighbors fractions...")
-            tmp_label_res = []
-            fractions_results, tmp_label_res, knn_vicinity = [], [], []
-            if self.parallel == False:
-                for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis"):
-                    result, label_result, knn_perc = self._calculate_fractions_for_subset(indices, [n], id_affinity_label)
-                    fractions_results.append(result)
-                    tmp_label_res.append(label_result)
-                    knn_vicinity.append(knn_perc)
-            # Use joblib.Parallel to parallelize the computation
-            if self.parallel == True:
-                results = Parallel(n_jobs=10)(
-                    delayed(analyze_neighbors)(self, indices, n, id_affinity_label) 
-                    for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis")
-                )
-                fractions_results, tmp_label_res, knn_vicinity = [], [], []
-                # Unpack the results
-                for result, label_result, knn_perc in results:
-                    fractions_results.append(result)
-                    tmp_label_res.append(label_result)
-                    knn_vicinity.append(knn_perc)
-            print(f' NN running time {time.time() - t_NN}')
-            knn_vicinity = np.array(knn_vicinity)
-            # We create an empty DataFrame and fill it with the results
-            label_idx = sorted(set(key for dic in tmp_label_res for key in dic.keys()))
-            result_labels_df = pd.DataFrame(index=label_idx)  # Create index from all possible labels
-            for i, result in enumerate(tmp_label_res):  # i should be the respective NN
-                for label, percentage in result.items():
-                    result_labels_df.loc[label, i] = percentage  # Set the percentage in the correct position
-            print(result_labels_df)
-        self.label_results = result_labels_df
-        self.knn_vicinity = knn_vicinity
-        
-        return fractions_results, indices, distances, indices_affinity_mat, lev_mat, id_affinity_label
-    
-    @profile   
-    def calculate_fractions_for_data_FAISS(self):
-        self.df= self.df.loc[self.id_index]
-        self.df['affinity']= self.df[self.colname_affinity]
-        self.df['junction_aa']= self.df[self.colname_junction]
-        # self.neigh = NearestNeighbors(metric=self.metric, n_jobs=5)
-        # self.neigh.fit(list(self.df['embedding']))
-        self.neigh.fit(self.embedding)
-
-        self.df['affinity'] = self.df[self.colname_affinity]
-        self.df['junction_aa'] = self.df[self.colname_junction]
-
-
-
-
-
-        # Compute the nearest neighbors for the maximum number of neighbors needed
-        print("Computing KNN ...")
-
-        
-        xb = self.embedding  
-        n_samples, dim = xb.shape
-        k = max(self.neighbor_numbers)   # how many neighbors
-
-        # 1) tell FAISS how many threads to use
-        #    (this sets OpenMP threads for FlatL2 brute-force)
-        faiss.omp_set_num_threads(5)
-
-        # 2) build or reload a disk-backed “FlatL2” index
-        idx_file = "faiss_flat_L2.index"
-        if not os.path.exists(idx_file):
-            flat = faiss.IndexFlatL2(dim)     # exact L2
-            flat.add(xb)                      # copies all xb into RAM once
-            faiss.write_index(flat, idx_file)
-
-        # now reopen with mmap so the OS page-cache backs it,
-        # no second full copy in RAM at search-time
-        index = faiss.read_index(idx_file, faiss.IO_FLAG_MMAP)
-
-        # 3) search exactly as before
-        distances, indices = index.search(xb, k)
-
-        # 4) cast into the same dtypes sklearn would give you
-        #    assuming xb.dtype is float32 → sklearn euclidean distances
-        #    on float32 inputs also returns float32
-        distances = distances.astype(xb.dtype, copy=False)
-        indices   = indices.astype(np.int64, copy=False)
-        # analyze_memory_usage("after KNN")
-        # if you converted embeddings into a list or array:
-
-        fractions_results = []
-        indices_affinity = self.df.iloc[indices.flatten()]['affinity'].values
-        # Redimension affinity values array to correspond to indices shape
-        id_affinity_label = self.df.loc[self.id_index, 'affinity']
-        indices_affinity_mat = indices_affinity.reshape(indices.shape)
-        t_lev = time.time()        
-        print("Computing Levenshtein distances...")
-        lev_mat = []
-        # tqdm progress bar for Levenshtein distance computation
-        for idx in tqdm(range(len(self.id_index)), desc="Levenshtein distances"):
-            seq_index = self.id_index[idx]
-            NN_index = indices[idx]
-            # Use .loc to access the row by index and get the 'junction_aa' column value
-            ref_junction_aa = self.df.loc[seq_index]['junction_aa']
-            # Use .iloc to access rows by integer-location based indexing and get the 'junction_aa' column values
-            nn_junction_aa = self.df.iloc[NN_index]['junction_aa']
-            # Compute Levenshtein distances between the reference sequence and its K nearest neighbors
-            lev_mat.append(compute_levenshtein(ref_junction_aa, nn_junction_aa))
-        lev_mat = np.array(lev_mat)
-        print(f' LEV running time {time.time() - t_lev}')
-        
-        if self.skip_neighbors_analysis:
-            print("Skipping Neighbors analysis...")
-            fractions_results = [np.nan] * len(self.neighbor_numbers)
-            tmp_label_res = {label: [np.nan] * len(self.neighbor_numbers) for label in id_affinity_label.unique()}
-            knn_vicinity = np.zeros((len(self.neighbor_numbers), len(self.id_index)))
-            result_labels_df = pd.DataFrame()
-        else:
-            t_NN = time.time()
-            print("Calculating nearest neighbors fractions...")
-            tmp_label_res = []
-            fractions_results, tmp_label_res, knn_vicinity = [], [], []
-            if self.parallel == False:
-                for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis"):
-                    result, label_result, knn_perc = self._calculate_fractions_for_subset(indices, [n], id_affinity_label)
-                    fractions_results.append(result)
-                    tmp_label_res.append(label_result)
-                    knn_vicinity.append(knn_perc)
-            # Use joblib.Parallel to parallelize the computation
-            if self.parallel == True:
-                results = Parallel(n_jobs=10)(
-                    delayed(analyze_neighbors)(self, indices, n, id_affinity_label) 
-                    for n in tqdm(self.neighbor_numbers, desc="Neighbors analysis")
-                )
-                fractions_results, tmp_label_res, knn_vicinity = [], [], []
-                # Unpack the results
-                for result, label_result, knn_perc in results:
-                    fractions_results.append(result)
-                    tmp_label_res.append(label_result)
-                    knn_vicinity.append(knn_perc)
-            print(f' NN running time {time.time() - t_NN}')
-            knn_vicinity = np.array(knn_vicinity)
-            # We create an empty DataFrame and fill it with the results
-            label_idx = sorted(set(key for dic in tmp_label_res for key in dic.keys()))
-            result_labels_df = pd.DataFrame(index=label_idx)  # Create index from all possible labels
-            for i, result in enumerate(tmp_label_res):  # i should be the respective NN
-                for label, percentage in result.items():
-                    result_labels_df.loc[label, i] = percentage  # Set the percentage in the correct position
-            print(result_labels_df)
-        self.label_results = result_labels_df
-        self.knn_vicinity = knn_vicinity
-        
-        return fractions_results, indices, distances, indices_affinity_mat, lev_mat, id_affinity_label
-    
-    
     
 
     def calculate_fractions_for_data(self):
@@ -367,22 +159,6 @@ class Vicinity_analysis:
         # Redimension affinity values array to correspond to indices shape
         id_affinity_label = self.df.loc[self.id_index, 'affinity']
         indices_affinity_mat = indices_affinity.reshape(indices.shape)
-
-        # lev_mat = []
-        # # tqdm progress bar for Levenshtein distance computation
-        # for idx in tqdm(range(len(self.id_index)), desc="Levenshtein distances",
-        #                 file=sys.stdout,     # force stdout carriage-return updates
-        #                 leave=False          # clear bar on completion
-        #                 ):
-        #     seq_index = self.id_index[idx]
-        #     NN_index = indices[idx]
-        #     # Use .loc to access the row by index and get the 'junction_aa' column value
-        #     ref_junction_aa = self.df.loc[seq_index]['junction_aa']
-        #     # Use .iloc to access rows by integer-location based indexing and get the 'junction_aa' column values
-        #     nn_junction_aa = self.df.iloc[NN_index]['junction_aa']
-        #     # Compute Levenshtein distances between the reference sequence and its K nearest neighbors
-        #     lev_mat.append(compute_levenshtein(ref_junction_aa, nn_junction_aa))
-        # lev_mat = np.array(lev_mat)
         
         t_lev = time.time()        
         print("Computing Levenshtein distances...")
@@ -402,18 +178,6 @@ class Vicinity_analysis:
         lev_mat = np.array(lev_mat)
 
         print(f' LEV running time {time.time() - t_lev}')
-
-
-        # #iteration 3
-        # junctions = self.df['junction_aa'].tolist()
-
-        # t0 = time.time()
-        # lev_mat = np.array([
-        #     [RapidfuzzLevenshtein.distance(junctions[seq_idx], junctions[nn_idx])
-        #     for nn_idx in indices[i]]
-        #     for i, seq_idx in enumerate(self.id_index)
-        # ], dtype=int)
-        # print(f"LEV running time {time.time() - t0:.2f}s")
 
   
         if self.skip_neighbors_analysis:
@@ -489,18 +253,12 @@ class Vicinity_analysis:
         perc = (neighbors_affinity == given_affinity).sum() / len(neighbors_affinity)    
         return perc
         
-    def perc_Euclidian_radius(self,  distance_thresholds):
+    def perc_cosine_radius(self,  distance_thresholds):
         quantiles=(0.01, 0.95)
         all_distances = self.NN_dist.flatten()
         min_dist = np.percentile(all_distances, quantiles[0] * 100)
         max_dist = np.percentile(all_distances, quantiles[1] * 100)  
         # # Create evenly spaced thresholds between min_dist and max_dist
-        # if len(self.df) < 2500:
-        #     distance_thresholds = np.concatenate([
-        #     np.linspace(min_dist, min_dist + (max_dist - min_dist) * 0.1, 10),
-        #     np.linspace(min_dist + (max_dist - min_dist) * 0.1, max_dist, 5)
-        #     ])
-        # else:
         distance_thresholds = np.linspace(min_dist, max_dist, 15)
         self.lin_density_thresholds = np.linspace(min_dist, max_dist, 7)
         print(f"Computed threshold are {distance_thresholds} !")
@@ -671,45 +429,6 @@ class Vicinity_analysis:
         print(f"Time elapsed: {end - start} seconds")
         return adj_mat_list ,row_ids_all
 
-
-
-
-
-def calculate_moran_index(distance_mat, NN_id_mat, label_target, distance_threshold, weight_distance=False):
-    # Define who are the neighbors -- EU or LD threshold
-    print("calc spatial matrix")
-    spatial_NN = (distance_mat <= distance_threshold).astype(int)
-    # spatial_NN[distance_mat > distance_threshold] = 0
-    
-    # Number of observations
-    n = distance_mat.shape[0]
-    print("calc NN")
-    # Create the neighbors and weights dictionaries
-    neighbors = {i: NN_id_mat[i][spatial_NN[i] > 0].tolist() for i in range(n)}
-    
-    if weight_distance == True:
-        print("calc Weighted weights")
-        distance_mat=distance_mat+ 1e-9
-        weights = {i: distance_mat[i][spatial_NN[i] > 0].tolist() for i in range(n)}  # Assume all nonzero are weights
-        w = W(neighbors, weights, silence_warnings=True)
-    elif weight_distance==False:
-        print("calc  weights")
-        w = W(neighbors)
-        
-    # Encoding labels into numerical values
-    label_encoder = LabelEncoder()
-    labels = label_target
-    values = label_encoder.fit_transform(labels)
-    label_mapping = dict(zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_)))
-    print("Label to number mapping:", label_mapping)
-    print(f"Calculate Moran's I for distance {distance_threshold}")
-    mi = Moran(values, w)
-    
-    # Print properties to ensure it's set up correctly
-    print("Number of observations:", w.n)
-    print("Percentage of nonzero weights:", "%.3f" % w.pct_nonzero)
-    print(f"Moran's I: {mi.I}, p-value: {mi.p_sim} , threshold = {distance_threshold}")
-    return mi.I, mi.p_sim ,w.pct_nonzero
 
 
 def prepare_data_for_plotting_LD_MAT(matrix_path,metadata_df,vicinity_df,  id_index_sample , max_LD, junction_aa_col='junction_aa', affinity_col='affinity'):
@@ -1001,166 +720,4 @@ def run_ggplot_vicinity( analysis_name  , input_ED,input_LD, output_path= None):
         print("R script output:", output.stdout)
     except subprocess.CalledProcessError as e:
         print("Error running R script:", e.stderr)
-
-
-#previous code
-
-def prepare_data_for_plotting_debug(df, LD_dist , sampled_indices= None, junction_aa_col='junction_aa', affinity_col='affinity'):
-    df['affinity']= df[affinity_col]
-    df['junction_aa']= df[junction_aa_col]
-    num_samples = len(sampled_indices)
-    if sampled_indices is None:
-      sampled_indices =df['id']
-      num_samples = len(sampled_indices)
-    # sampled_indices = np.random.choice(df.index, size=num_samples, replace=False)
-    # Inizializzazione degli array per i risultati
-    results = np.zeros((num_samples, LD_dist))
-    results_nan = np.zeros((num_samples, LD_dist))
-    num_of_points = np.zeros((num_samples, LD_dist))
-    affinities = []
-    # Iterazione su ciascun indice campionato
-    start_time = time.time()
-    for row, index in tqdm(enumerate(sampled_indices), total=num_samples, desc="Processing samples"):
-    # for row, index in enumerate(sampled_indices):
-        initial_affinity = df.loc[index, 'affinity']
-        initial_seq = df.loc[index, 'junction_aa']
-        affinities.append(initial_affinity)
-        # Calcolo delle distanze di Levenshtein
-        lev_dists = compute_levenshtein(initial_seq, df.iloc[1:]['junction_aa'])
-        for lev_dist in range(1, LD_dist + 1):
-            indices_at_dist = [i for i, x in enumerate(lev_dists) if  x== lev_dist]
-            if row < 3:
-                print(f'current lev thr {lev_dist}')
-                print(f'mean lev thr {statistics.mean([x for i, x in enumerate(lev_dists) if  x == lev_dist])}')
-                print(f'indices_at_dist are {len(indices_at_dist)}')
-                value_counts = Counter(indices_at_dist)
-                # print(f'distribution of {value_counts}')
-            if indices_at_dist:
-                affinities_at_dist = df.iloc[indices_at_dist]['affinity']
-                if row < 3:
-                    print(f'same label at LD {sum(affinities_at_dist == initial_affinity)}')
-                percentage = sum(affinities_at_dist == initial_affinity) / len(affinities_at_dist)
-                results[row, lev_dist - 1] = percentage
-                num_of_points[row, lev_dist - 1] = len(affinities_at_dist)
-            else:
-                if lev_dist==1:
-                    results_nan[row,lev_dist-1] =np.nan
-                results[row, lev_dist - 1] = np.nan  # Uso NaN per le distanze senza sequenze
-                num_of_points[row, lev_dist - 1] = 0
-    seq_duration = time.time() - start_time
-    print(f"Seq execution time: {seq_duration:.2f} seconds")
-    nan_count = np.isnan(results).sum()
-    nan_count2 = np.isnan(results_nan).sum()
-    print(f'Number of total NaNs in results: {nan_count}')            
-    print(f'Number of LD 1 NaNs in results: {nan_count2}')            
-    # Combine results and num_of_points into a single DataFrame
-    columns = [f'LD_{i}' for i in range(1, LD_dist + 1)]
-    df_results = pd.DataFrame(results, columns=[f'Perc_{col}' for col in columns]) # PERCENTAGE OF Points with SAME LABLE (vicinity score)
-    df_num_points = pd.DataFrame(num_of_points, columns=[f'Num_{col}' for col in columns])
-    print(df_results)
-    print(df_num_points)
-    # Merge into one DataFrame
-    df_combined = pd.concat([df_results, df_num_points], axis=1)
-    df_combined['sample_id'] = sampled_indices
-    df_combined['affinity'] = affinities
-    
-    # Combine results and num_of_points into a single DataFrame
-    columns = [f'LD_{i}' for i in range(1, LD_dist + 1)]
-    df_combined = pd.DataFrame({
-        **{f'Perc_{col}': results[:, idx] for idx, col in enumerate(columns)},
-        **{f'Num_{col}': num_of_points[:, idx] for idx, col in enumerate(columns)},
-        'sample_id': sampled_indices,
-        'affinity': affinities
-    })
-    
-    # Calculate summary statistics
-    df_summary = pd.DataFrame()
-    for col in columns:
-        df_combined[f'NaN_Count_{col}'] = df_combined[f'Perc_{col}'].isna()
-        summary_stats = df_combined.groupby('affinity')[[f'Num_{col}', f'NaN_Count_{col}']].agg({
-            f'Num_{col}': 'mean',
-            f'NaN_Count_{col}': 'mean'
-        }).rename(columns={f'Num_{col}': f'Avg_Num_{col}', f'NaN_Count_{col}': f'Avg_NaN_Percentage_{col}'})
-        df_summary = pd.concat([df_summary, summary_stats], axis=1)
-    
-    grouped = df_combined.groupby('affinity')
-    grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].count()
-    grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].mean()
-    df_summary[[f'Num_of_LD_{i}' for i in range(1,LD_dist+1)]] = grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].count()
-    df_summary[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]] = grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].mean()
-    
-    return df_combined, df_summary 
-  
-
-def prepare_data_for_plotting_sequential(df, LD_dist , sampled_indices= None, junction_aa_col='junction_aa', affinity_col='affinity'):
-    df['affinity']= df[affinity_col]
-    df['junction_aa']= df[junction_aa_col]
-    num_samples = len(sampled_indices)
-    if sampled_indices is None:
-      sampled_indices =df['id']
-      num_samples = len(sampled_indices)
-    # sampled_indices = np.random.choice(df.index, size=num_samples, replace=False)
-    # array initialization
-    results = np.zeros((num_samples, LD_dist))
-    results_nan = np.zeros((num_samples, LD_dist))
-    num_of_points = np.zeros((num_samples, LD_dist))
-    affinities = []
-    # iteration on each sampled index
-    for row, index in tqdm(enumerate(sampled_indices), total=num_samples, desc="Processing samples"):
-    # for row, index in enumerate(sampled_indices):
-        initial_affinity = df.loc[index, 'affinity']
-        initial_seq = df.loc[index, 'junction_aa']
-        affinities.append(initial_affinity)
-        # Calcolo delle distanze di Levenshtein
-        lev_dists = compute_levenshtein(initial_seq, df.iloc[1:]['junction_aa'])
-        for lev_dist in range(1, LD_dist + 1):
-            indices_at_dist = [i for i, x in enumerate(lev_dists) if  0< x <= lev_dist]
-            if indices_at_dist:
-                affinities_at_dist = df.iloc[indices_at_dist]['affinity']
-                percentage = sum(affinities_at_dist == initial_affinity) / len(affinities_at_dist)
-                results[row, lev_dist - 1] = percentage
-                num_of_points[row, lev_dist - 1] = len(affinities_at_dist)
-            else:
-                results[row, lev_dist - 1] = np.nan  # Uso NaN per le distanze senza sequenze
-                num_of_points[row, lev_dist - 1] = 0          
-    # Combine results and num_of_points into a single DataFrame
-    columns = [f'LD_{i}' for i in range(1, LD_dist + 1)]
-    df_results = pd.DataFrame(results, columns=[f'Perc_{col}' for col in columns]) # PERCENTAGE OF Points with SAME LABLE (vicinity score)
-    df_num_points = pd.DataFrame(num_of_points, columns=[f'Num_{col}' for col in columns])
-    print(df_results)
-    print(df_num_points)
-    # Merge into one DataFrame
-    df_combined = pd.concat([df_results, df_num_points], axis=1)
-    df_combined['sample_id'] = sampled_indices
-    df_combined['affinity'] = affinities
-    
-    # Combine results and num_of_points into a single DataFrame
-    columns = [f'LD_{i}' for i in range(1, LD_dist + 1)]
-    df_combined = pd.DataFrame({
-        **{f'Perc_{col}': results[:, idx] for idx, col in enumerate(columns)},
-        **{f'Num_{col}': num_of_points[:, idx] for idx, col in enumerate(columns)},
-        'sample_id': sampled_indices,
-        'affinity': affinities
-    })
-    
-    # Calculate summary statistics
-    df_summary = pd.DataFrame()
-    for col in columns:
-        df_combined[f'NaN_Count_{col}'] = df_combined[f'Perc_{col}'].isna()
-        summary_stats = df_combined.groupby('affinity')[[f'Num_{col}', f'NaN_Count_{col}']].agg({
-            f'Num_{col}': 'mean',
-            f'NaN_Count_{col}': 'mean'
-        }).rename(columns={f'Num_{col}': f'Avg_Num_{col}', f'NaN_Count_{col}': f'Avg_NaN_Percentage_{col}'})
-        df_summary = pd.concat([df_summary, summary_stats], axis=1)
-    
-    grouped = df_combined.groupby('affinity')
-    grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].count()
-    grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].mean()
-    df_summary[[f'Num_of_LD_{i}' for i in range(1,LD_dist+1)]] = grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].count()
-    df_summary[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]] = grouped[[f'Perc_LD_{i}' for i in range(1,LD_dist+1)]].mean()
-    
-    return df_combined, df_summary 
-    
-
-
 

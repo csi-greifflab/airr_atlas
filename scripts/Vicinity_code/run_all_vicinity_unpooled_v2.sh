@@ -4,10 +4,12 @@
 models=("antiberta2" "esm2")
 models_s=("ab2" "esm2")
 models_s=("esm2")
+models_s=("ab2")
 chains=("paired_chain")
-chains=("heavy_chain")
+# chains=("heavy_chain")
 # chains=("full_chain" "cdr3_pooled" "paired_chain" "all_cdrh")
 layers=$(seq 0 33)  # Bash doesn't have range, using seq to create a range from 0 to 32 (for layers 0 to 32)
+# layers=$(seq 4 12)  # Bash doesn't have range, using seq to create a range from 0 to 32 (for layers 0 to 32)
 
 # Input metadata and precomputed LD
 # Input metadata and precomputed LD
@@ -26,7 +28,7 @@ LD_sample_size=10000
 chosen_metric='cosine'
 
 # Set max number of parallel jobs
-max_parallel_jobs=3
+max_parallel_jobs=2
 current_jobs=0
 
 #layers will be 1, 6, 16,33 
@@ -42,12 +44,20 @@ for model in "${models_s[@]}"; do
       # input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/${model}/unpooled/100k_sample_trastuzumab_${chain}_${model}_layer_$((layer))_flat.pt"
       input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${model}_${models_s}_embeddings_unpooled_layer_$((layer+1)).pt"
       input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${model}_embeddings_unpooled_layer_$((layer+1)).pt"
-                        
+      
+      
+      input_idx="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_${chain}_100k_${model}_idx.csv"
+      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${model}_${model}_embeddings_unpooled_layer_$((layer+1)).pt"
+      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled_pca1000/tz_${chain}_100k_antiberta2_${model}_embeddings_unpooled_layer_$((layer+1))_PCA1000.pt"
+
       #check if file exists
       # if [[ "$model" == "antiberta2" && $layer -ge 17 ]]; then continue; fi
       if [[ "$model" == "ab2" && $layer -ge 17 ]]; then continue; fi
       if [ ! -f "$input_embeddings" ]; then
         echo "File $input_embeddings does not exist"
+      fi
+      if [ ! -f "$input_idx" ]; then
+        echo "File $input_idx does not exist"
       fi
     done
   done
@@ -69,8 +79,15 @@ for model in "${models_s[@]}"; do
 
       # input_embeddings="/doctorai/niccoloc/attention_experiment/${model}/${chain}/attention_matrices_flat_avg_l$(layer+1)_${chain}_${model}.pt"
       # input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/${model}/unpooled/100k_sample_trastuzumab_${chain}_${model}_layer_$((layer))_flat.pt"
-      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${models_s}/embeddings_unpooled/tz_${chain}_100k_${models}_${models_s}_embeddings_unpooled_layer_$((layer+1)).pt"
+      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${models}_${models_s}_embeddings_unpooled_layer_$((layer+1)).pt"
       input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${model}_embeddings_unpooled_layer_$((layer+1)).pt"
+
+
+
+      input_idx="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_${chain}_100k_${model}_idx.csv"
+      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled/tz_${chain}_100k_${model}_${model}_embeddings_unpooled_layer_$((layer+1)).pt"
+      input_embeddings="/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/${model}/embeddings_unpooled_pca1000/tz_${chain}_100k_antiberta2_${model}_embeddings_unpooled_layer_$((layer+1))_PCA1000.pt"
+
 
       # ab2 layer 17 and above are not available
       # if [[ "$model" == "antiberta2" && $layer -ge 17 ]]; then continue; fi
@@ -79,7 +96,7 @@ for model in "${models_s[@]}"; do
       # Construct the command
       command=(
         "python" "Vicinity_pipeline.py"
-        "--analysis_name" "Unpooled_${model}_${chain}_layer_${layer}"
+        "--analysis_name" "Unpooled_${model}_${chain}_PCA1000_layer_${layer}"
         "--input_metadata" "$input_metadata"
         "--input_embeddings" "$input_embeddings"
         "--input_idx" "$input_idx"

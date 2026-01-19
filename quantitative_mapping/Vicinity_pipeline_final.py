@@ -36,61 +36,8 @@ import argparse
 from sklearn.preprocessing import scale
 import tracemalloc
 
-# TODO look for LD to total TZ dataset
-# Simulate command-line arguments for debugging
-# sys.argv = [
-#     'Vicinity_pipeline.py',  # Script name (first argument in sys.argv)
-#     '--analysis_name', 'VH_ab2_attMat_ALL_layer1_cosine_v7',
-#     '--input_metadata', '/doctorai/niccoloc/tz_metadata_60k.csv',
-#     '--input_embeddings', '/doctorai/niccoloc/attention_matrices_flat_avg_ALL_ab2.pt',
-#     '--save_results',
-#     '--radius_range', '0,6,0.2',
-#     '--plot_results',
-#     '--df_junction_colname', 'junction_aa',
-#     '--df_affinity_colname', 'affinity',
-#     '--sample_size', '0',
-#     '--chosen_metric', 'cosine',
-#     '--compute_LD'
-# ]
-# 
-# 
-# sys.argv = [
-#     'Vicinity_pipeline.py' ,
-#     '--analysis_name' ,'WHOLE_LD' ,
-#     '--input_metadata' ,'/doctorai/niccoloc/trastuzumab_metadata.csv' ,
-#     '--input_embeddings' ,'/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab/antiberta2/cdr3_only/100k_sample_trastuzmab_cdr3_heavy_only_antiberta2_layer_16.pt' ,
-#     '--input_idx' , '/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/100k_sample_trastuzmab_antiberta2_idx.csv',
-#     '--compute_LD' ,
-#     '--save_results'  ,
-#     '--plot_results'  ,
-#     '--sample_size', '4000' ,
-#     '--LD_sample_size', '530000',
-# ]
-# 
-# 
-# sys.argv = [
-#      'Vicinity_pipeline.py' ,
-#     '--analysis_name' ,'debug_FAISS' ,
-#      '--input_metadata' ,"/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv" ,
-#      '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/esm2/embeddings_unpooled/tz_paired_chain_100k_esm2_esm2_embeddings_unpooled_layer_1.npy",
-#      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_paired_chain_100k_esm2_idx.csv",
-#      '--compute_LD' ,
-#       '--chosen_metric', 'cosine',
-#       '--LD_matrix' , '/doctorai/niccoloc/tz_LD_dist_mat_HB_LB.npy',
-#     #   '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
-# #     '--save_results'  ,
-# #     '--plot_results'  ,
-#       '--result_dir', '/doctorai/niccoloc/Vicinity_results_100k_DEBUG',
-#       '--df_junction_colname', 'cdr3_aa',
-#       '--df_affinity_colname', 'binding_label',
-#      '--sample_size', '3000' ,
-#      '--LD_sample_size', '530000',
-#      '--skip_knn'
-#  ]
 
-# input_idx: /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_paired_chain_100k_esm2_idx.csv
-# input_metadata: /doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv
-# input_embeddings: /doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/esm2/attention_matrices_average_layer
+#debugging args 
 
 sys.argv = [
      'Vicinity_pipeline.py' ,
@@ -101,14 +48,8 @@ sys.argv = [
     #  '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_full/esm2/embeddings/tz_cdr3_esm2_embeddings_layer_32.pt",
     #  '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis2/tz_cdr3_only_100k_idx.csv",
      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_npy/esm2_t33_650M_UR50D/tz_cdr3_100k_idx.csv",
-    #  '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/trastuzumab_full/tz_cdr3_idx.csv",
-
-    #  '--compute_LD' ,
       '--chosen_metric', 'cosine',
       '--LD_matrix' , '/doctorai/niccoloc/tz_LD_dist_mat_HB_LB.npy',
-    #   '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
-#     '--save_results'  ,
-#     '--plot_results'  ,
       '--result_dir', '/doctorai/niccoloc/Vicinity_results_sample_test',
       '--df_junction_colname', 'cdr3_aa',
       '--df_affinity_colname', 'binding_label',
@@ -118,51 +59,6 @@ sys.argv = [
  ]
  
 
-
-# sys.argv = [
-#      'Vicinity_pipeline.py' ,
-#      '--analysis_name' ,'test_adj' ,
-#      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/brian_hie/cr9114_hie_idx.csv",
-#      '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/brian_hie/antiberta2-cssp/embeddings/brian_hie_antiberta2-cssp_embeddings_layer_1.npy",
-#      '--input_metadata' ,"/doctorai/userdata/airr_atlas/data/sequences/bcr/brian_hie/cr9114_hie_metadata.csv" ,
-
-
-#       '--compute_LD' ,
-#       '--chosen_metric', 'cosine',
-#       '--LD_matrix' , '/doctorai/niccoloc/tz_LD_dist_mat_HB_LB.npy',
-#     #   '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
-# #     '--save_results'  ,
-# #     '--plot_results'  ,
-#       '--result_dir', '/doctorai/niccoloc/Vicinity_results_sample_test',
-#       '--df_junction_colname', 'Sequence',
-#       '--df_affinity_colname', 'binding_label',
-#      '--sample_size', '0' ,
-#      '--LD_sample_size', '530000',
-#      '--skip_knn'
-#  ]
-
-# sys.argv = [
-#      'Vicinity_pipeline.py' ,
-#      '--analysis_name' ,'test_adj_cov' ,
-#      '--input_idx' , "/doctorai/userdata/airr_atlas/data/embeddings/covabdab/esm2_t33_650M_UR50D/covabdab_bg_ESM2_idx.csv",
-#      '--input_embeddings' ,"/doctorai/userdata/airr_atlas/data/embeddings/covabdab/esm2_t33_650M_UR50D/embeddings/covabdab_esm2_t33_650M_UR50D_embeddings_layer_26.npy",
-#      '--input_metadata' ,"/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab_AND_background.tsv" ,
-
-
-#       '--compute_LD' ,
-#       '--chosen_metric', 'cosine',
-#       '--LD_matrix' , '/doctorai/niccoloc/tz_LD_dist_mat_HB_LB.npy',
-#     #   '--precomputed_LD' , "/doctorai/niccoloc/Vicinity_results_100k/WHOLE_LD/LD_WHOLE_hb_lb_530k.csv",
-# #     '--save_results'  ,
-# #     '--plot_results'  ,
-#       '--result_dir', '/doctorai/niccoloc/Vicinity_results_sample_test',
-#       '--df_junction_colname', 'VH_VL',
-#       '--df_affinity_colname', 'binding_label',
-#      '--sample_size', '0' ,
-#      '--LD_sample_size', '530000',
-#      '--skip_knn'
-#  ]
- 
 
 
 
@@ -184,7 +80,7 @@ def parse_arguments():
     parser.add_argument('--chosen_metric', type=str, choices=['cosine', 'euclidean'], default='cosine', help='Metric to use')
     parser.add_argument('--sample_size', type=int, default= 0 , help='Size of the max sample of each label')
     parser.add_argument('--LD_sample_size', type=int, default= 10000 , help='Number of seqs (X vs ALL) to check in the LD calculations')
-    parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results' ,default="") #Old to be removed
+    parser.add_argument('--precomputed_LD', type=str, required=False,help='path of the precomputed file.csv with LD results' ,default="")
     parser.add_argument("--radius_range", type=str, default="7,24,1", help="Specify the min and max radius and steps separated by a comma (e.g., '7,24,1')")
     parser.add_argument('--skip_knn', action='store_true', help='Flag to skip the  KNN Vicinity ')
     parser.add_argument('--LD_matrix', type=str, required=False,default="" , help='path of the precomputed file.pt with LD results')
@@ -229,8 +125,6 @@ def load_data(input_metadata, input_embeddings,idx_reference):
         })
         df = pd.merge(seqs, tensors_df, on='id')
     else:
-        #'/doctorai/userdata/airr_atlas/data/embeddings/levels_analysis/antiberta2/full_chain/100k_sample_trastuzmab_full_chain_antiberta2_idx.csv'
-        #'/doctorai/userdata/airr_atlas/data/files_for_trastuzumab/tz_heavy_chains_airr_dedup_final.tsv'
         idx_df= pd.read_csv(idx_reference, sep =None , engine ='python')
         print(idx_df.head())
         print(tensors[:5])
@@ -241,8 +135,6 @@ def load_data(input_metadata, input_embeddings,idx_reference):
             # 'embedding': list(tensors)
         })
         df = pd.merge(seqs, tensors_df, on='sequence_id')
-        # embeddings = tensors[[df['tensor_id'].values]]  # extracting the correct entries matching the sampled indices
-        # print(embeddings)
     print("...Removing duplicated sequences ...")
     df = df[~df[args.df_junction_colname].duplicated(keep=False)]
     print(f"Number of sequences in the dataset after de-deuplication: {len(df)}, per class: {df[args.df_affinity_colname].value_counts()}")
@@ -494,7 +386,7 @@ try:
   min_radius, max_radius, step = float(args.radius_range.split(',')[0]), float(args.radius_range.split(',')[1]), float(args.radius_range.split(',')[2])
   #ED_radius = range(min_radius, max_radius )
   ED_radius= np.arange(min_radius, max_radius, step)
-#   print("Euclidean distance radius range and steps:", list(ED_radius))
+
 except ValueError:
   print("Error: Please ensure you provide two integers separated by a comma for the radius range.")
 
@@ -505,15 +397,13 @@ create_result_folder(result_folder)
 
 
 
-# df = load_data(args.input_metadata, args.input_embeddings, idx_reference)
-# tensors = np.load('test_memmap2.npy', mmap_mode='r')
-# df , embeddings  = load_data(args.input_metadata, 'test_memmap2.npy', idx_reference)
 df , embeddings  = load_data(args.input_metadata, args.input_embeddings, idx_reference)
 id_index_sample = df['id']
 
 
-embeddings = select_first_d_dims(embeddings, token_dim=1280, num_cols=300)
-print(embeddings.shape)
+#option to cut the embeddings dimensions  - prototype 
+# embeddings = select_first_d_dims(embeddings, token_dim=1280, num_cols=300)
+# print(embeddings.shape)
 
 
 if args.sample_size != 0 :
@@ -562,11 +452,12 @@ vicinity_analysis_instance.run_analysis()       # This populates the necessary a
 print(df[df_affinity_colname].value_counts())
 
 # Run Vicinity Radius
-percentages_results,perc_df, res_df, mean_num_points, LD1_res, LD2_res = vicinity_analysis_instance.perc_Euclidian_radius(ED_radius)
+percentages_results,perc_df, res_df, mean_num_points, LD1_res, LD2_res = vicinity_analysis_instance.perc_cosine_radius(ED_radius)
 tmp_ed_sum=vicinity_analysis_instance.summary_results 
-# Run Adjacency matrix
+# Run multiple Adjacency matrix
 # density_thresholds= [0.001,0.002, 0.003, 0.004,0.005, 0.006, 0.007, 0.008, 0.009, 0.01]
 
+# knn density Adjacency matrix
 knn_density_thr=[10, 50, 100, 500, 1000]
 knn_density_thr=[10]
 density_thresholds=[]
@@ -574,10 +465,12 @@ for i in knn_density_thr:
     density_thresholds.append(vicinity_analysis_instance.NN_dist[:,i].mean())
     print(f"Computed density  thresholds knn = {knn_density_thr}: {density_thresholds}")
 
+# linear density Adjacency matrix
 lin0_density_thr=[vicinity_analysis_instance.lin_density_thresholds.tolist()[0]]
 #7 evenly spaced thresholds acrosse the 0.01 and 0.95 quantiles of the distances
 
 
+#LD 1 density Adjacency matrix --- Currently in use
 LD_thr =[]
 for thr in [1,2]:
     mask = (vicinity_analysis_instance.NN_lev[:, 1:] <= thr)
@@ -653,7 +546,7 @@ chosen_sample_size=  args.LD_sample_size
 LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{args.sample_size}k.csv"
 
 if args.LD_matrix != "":
-    print( "Using the LD matrix file at ", args.LD_matrix)
+    print( "Using the LD matrix file at ", args.LD_matrix , " by the  get_LD_matrix.py script ")
     LD_filename=f"{result_folder}d_mean1_summary_LD_{analysis_name}_{(len(id_index_sample))/1000}k.csv"
     matrix_path = args.LD_matrix
     d_res1,d_mean1 = prepare_data_for_plotting_LD_MAT(
@@ -672,25 +565,24 @@ if args.LD_matrix != "":
 
 
 
-if args.compute_LD == True:
-    print('LD computing...')
-    rand_100k=sample_affinities(pd.read_csv(args.input_metadata, sep=None), chosen_sample_size, df_affinity_colname).index
-    max_LD=5
-    d_res1,d_mean1 = prepare_data_for_plotting( pd.read_csv(args.input_metadata, sep=None),max_LD, sampled_indices=rand_100k) # to get VICINITY percentages of LD dist 
-    #( for i in sampled_indices --> LD calculation  i vs ALL)
-    #save_to_pickle(d_mean1, LD_filename)
-    d_mean1.to_csv(LD_filename)
-# TODO ---- Please parallelize this function, it's very slow, at least run each LD threshold on a different core
+# OLD - removed
+# if args.compute_LD == True:
+#     print('LD computing...')
+#     rand_100k=sample_affinities(pd.read_csv(args.input_metadata, sep=None), chosen_sample_size, df_affinity_colname).index
+#     max_LD=5
+#     d_res1,d_mean1 = prepare_data_for_plotting( pd.read_csv(args.input_metadata, sep=None),max_LD, sampled_indices=rand_100k) # to get VICINITY percentages of LD dist 
+#     #( for i in sampled_indices --> LD calculation  i vs ALL)
+#     #save_to_pickle(d_mean1, LD_filename)
+#     d_mean1.to_csv(LD_filename)
 
 
-
-if args.plot_results== True:
-    if args.compute_LD == False:
-        LD_filename = args.precomputed_LD
-    else:
-        print("Using the recently computed LD files")
-    
-    run_ggplot_vicinity(analysis_name,ED_filename,LD_filename, output_path= result_folder )
+#Outdated - removed
+# if args.plot_results== True:
+#     if args.compute_LD == False:
+#         LD_filename = args.precomputed_LD
+#     else:
+#         print("Using the recently computed LD files")
+#     run_ggplot_vicinity(analysis_name,ED_filename,LD_filename, output_path= result_folder )
 
 
 
