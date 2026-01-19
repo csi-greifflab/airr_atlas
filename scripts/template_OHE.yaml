@@ -1,0 +1,59 @@
+definitions:
+  datasets:
+    my_dataset:
+      format: AIRR
+      params:
+        column_mapping:
+          sequence_aa: junction_aa             # sequence_aa is the column name in the INPUT DATASET
+        columns_to_load: null
+        import_empty_aa_sequences: false
+        import_empty_nt_sequences: true
+        import_illegal_characters: false
+        import_out_of_frame: false
+        import_productive: true
+        import_unknown_productivity: true
+        import_with_stop_codon: false
+        is_repertoire: false
+        label_columns: null
+        paired: false
+        path: /doctorai/niccoloc/pancancer_b_cells_metadata_filtered.csv    # path to the INPUT DATASET
+        region_type: FULL_SEQUENCE
+        result_path: /doctorai/niccoloc/OHE               
+        separator: ','
+  encodings:
+    one_hot:
+      OneHot:
+        flatten: true
+        sequence_type: amino_acid
+        use_positional_info: false
+  example_weightings: {}
+  ml_methods: {}
+  motifs: {}
+  preprocessing_sequences:
+    my_preprocessing:
+    - length_filter:
+        SequenceLengthFilter:
+          max_len: 20
+          min_len: 1
+          region_type: FULL_SEQUENCE
+          sequence_type: AMINO_ACID
+  reports:
+    my_dme_report:
+      DesignMatrixExporter:
+        file_format: pt
+        name: my_dme_report
+  signals: {}
+  simulations: {}
+instructions:
+  my_instruction:
+    analyses:
+      my_analysis_1:
+        dataset: my_dataset
+        encoding: one_hot
+        labels:
+        - cancer_loc
+        report: my_dme_report
+    number_of_processes: 40
+    type: ExploratoryAnalysis
+output:
+  format: HTML
