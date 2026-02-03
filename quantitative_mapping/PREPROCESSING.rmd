@@ -1,0 +1,739 @@
+---
+title: "PREPROCESSING"
+output: html_document
+date: "2026-01-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+ ---
+title: "OHE_preprocessing2_restore"
+output: html_document
+date: "2025-03-31"
+editor_options: 
+  chunk_output_type: console
+---
+ 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library("withr", lib.loc= "/doctorai/niccoloc/libR2")
+library(dplyr , lib.loc = "/doctorai/niccoloc/libR2")
+library(tidyr , lib.loc = "/doctorai/niccoloc/libR2")
+library(ggplot2 , lib.loc = "/doctorai/niccoloc/libR2")
+library(viridis , lib.loc = "/doctorai/niccoloc/libR2")
+library(stringr , lib.loc = "/doctorai/niccoloc/libR2")
+library(patchwork , lib.loc = "/doctorai/niccoloc/libR2")
+library(data.table , lib.loc = "/doctorai/niccoloc/libR2")
+# library(Peptides, lib.loc= "/doctorai/niccoloc/libR")
+library(foreach, lib.loc= "/doctorai/niccoloc/libR2")
+# library(scico, lib.loc= "/doctorai/niccoloc/libR2")
+# library(BiocManager , lib.loc= "/doctorai/niccoloc/libR2")
+library(ggseqlogo , lib.loc= "/doctorai/niccoloc/libR2")
+# library(seqinr , lib.loc= "/doctorai/niccoloc/libR2")
+library("labeling", lib.loc= "/doctorai/niccoloc/libR2")
+library("isoband", lib.loc= "/doctorai/niccoloc/libR2")
+# library("ggridges", lib.loc= "/doctorai/niccoloc/libR2")
+library("withr", lib.loc= "/doctorai/niccoloc/libR2")
+ 
+ # install.packages("ggVennDiagram", lib="/doctorai/niccoloc/libR2")
+ # install.packages("ggridges", lib="/doctorai/niccoloc/libR2")
+# install.packages("doPar", lib="/doctorai/niccoloc/libR2")
+# install.packages("seqinr", lib="/doctorai/niccoloc/libR2")
+
+
+col26 <- c(
+  "#00895d",  "#4500f0",  "#49ff58",  "#b100e0",  "#00e773",  "#0222cf",  "#d8e500",  "#9852ff",  "#6b9500",  "#e500b9",  "#7affc4",  "#450061",  "#e17a00",  "#9badff",  "#b44200",  "#018690",  "#ff5158",  "#00340c",  "#ffccff",  "#120400",  "#c8ffe4",  "#5c001a",  "#ffcf88",
+  "#001f44",  "#ffadaa",  "#00567b")
+
+
+```
+
+
+
+```{r ireceptor}
+
+db_xy<-fread(
+  "/doctorai/userdata/airr_atlas/data/sequences/ireceptor/ireceptor_10M.tsv",sep="\t" )
+table(db_xy$sample_id)
+
+
+db_xy %>% 
+  select(repertoire_id, sequence_id,sequence_aa=junction_aa) %>%
+  # slice_head(n= 10000) %>% 
+  fwrite("ireceptor_10M.tsv.csv")
+
+
+```
+
+
+```{r}
+alphaseq= fread("/doctorai/userdata/airr_atlas/data/sequences/antigens/alphaseq_sars/alphaseq_binding_labels.csv")
+alphaseq= fread("/doctorai/userdata/airr_atlas/data/sequences/antigens/alphaseq_sars/alphaseq_df_renamed.csv")
+alphaseq= fread("/doctorai/userdata/airr_atlas/data/sequences/antigens/alphaseq_sars/alphaseq_df.csv")
+
+
+
+```
+
+
+
+
+
+
+
+
+
+```{r ag spec}
+#snippet to double check original files
+
+x1= fread('/doctorai/evgeniie/AIRR_atlas_2023/data/antigens/ebola/ebola_bcrs.csv')
+x1= fread('ag_spec_tot.csv')
+
+
+
+
+
+
+
+db_spec = fread("/doctorai//niccoloc/merged_df_may_2024_preprocessed_V2.csv")
+table(db_spec$dataset,db_spec$specificity)
+db_spec %>% 
+  mutate(junction_length = str_length(junction_aa)) %>%
+  filter(junction_length <= 35,
+         specificity != "unkn",
+         !str_detect(junction_aa,'[X ]')) %>%
+  select(sequence_id= id, sequence_aa=junction_aa, specificity) %>%  
+  fwrite("ag_spec_tot.csv")
+
+
+
+
+
+dms_db =fread("/doctorai/evgeniie/AIRR_atlas_2023/data/DMS/dms_ab_united_df.csv")
+cancer_db =fread( "/doctorai/evgeniie/AIRR_atlas_2023/data/pancancer_b_cells/pancancer_b_cells_metadata.csv")
+
+cancer_db_filter=cancer_db %>% 
+  mutate(cancer_loc= str_c(cancer, type, sep="_")) %>%
+  filter(
+    (type == "Adjacent" & cancer == "LIHC") |
+    (type == "Blood" & cancer %in% c("LC", "LIHC", "THCA")) |
+    (type == "Cancer" & cancer %in% c("CESC", "COAD", "LC", "LIHC", "OV", "RCC", "STAD")) |
+    (type == "LN_Met" & cancer == "STAD")
+  ) %>%
+  mutate(junction_length = str_length(junction_aa)) %>%
+  filter(junction_length <= 35,
+         !str_detect(junction_aa,'[X *]')) %>%
+  select(V1,sequence_aa=junction_aa, cancer_loc) 
+
+colnames(cancer_db_filter)[1]="sequence_id"
+cancer_db_filter %>% fwrite("pancancer_b_cells_metadata_filtered.csv")
+
+db_xy %>% 
+  select(repertoire_id, sequence_id,sequence_aa=junction_aa) %>%
+  # slice_head(n= 10000) %>% 
+  fwrite("ireceptor_10M.tsv.csv")
+
+
+```
+
+
+```{r}
+tz= fread('trastuzumab_metadata.csv')
+
+fread('/doctorai/caters/Merged_tra_hl.csv')
+
+
+```
+
+
+
+```{r Enghelhart alphaseq data preprocessing}
+file_path = '/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_df.csv'
+# file_path = '/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_df_renamed.csv'
+# file_path = '/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_binding_labels.csv'
+
+alphaseq= fread(file_path)
+alphaseq %>% pull(POI) %>%  unique() %>% length()
+alphaseq2=   alphaseq %>%
+  mutate(target2 = ifelse(Target == 'MIT_Target', 'MIT_Target', 'neg_ctrl'))  
+
+# Group by Assay, Replicate, and Target, then compute avg, std, and NA count
+alphaseq_median=  alphaseq %>%
+  mutate(target2 = ifelse(Target == 'MIT_Target', 'MIT_Target', 'neg_ctrl'))  %>% 
+  group_by(POI,Assay, target2) %>%
+  mutate(
+    was_NA= ifelse(is.na(Pred_affinity), T, F),
+    correct_affinity = median(Pred_affinity, na.rm=T )     ) %>% 
+  ungroup() %>% 
+  #imputation of the affinity for missing values
+  mutate(Pred_affinity = ifelse(is.na(Pred_affinity), correct_affinity, Pred_affinity))  %>%  
+  as.data.table()
+
+summary_data <- alphaseq_median[, .(
+  avg_pred_affinity = mean(Pred_affinity, na.rm = TRUE),  # Calculate mean, ignoring NAs
+  std_pred_affinity = sd(Pred_affinity, na.rm = TRUE),    # Calculate standard deviation, ignoring NAs
+  count_NA = sum(was_NA)                    # Count the number of NA values
+), by = .(POI,Assay, target2)] 
+
+#quantiles per target
+quantiles=summary_data %>% 
+  group_by(target2, Assay) %>% 
+  summarise(
+    q5 = quantile(avg_pred_affinity, 0.05, na.rm = TRUE),
+    q50 = quantile(avg_pred_affinity, 0.50, na.rm = TRUE),
+    q95 = quantile(avg_pred_affinity, 0.95, na.rm = TRUE)
+  )
+
+#change summary_data into pivot wider by the POI dplyr
+wide_data = summary_data %>%
+  pivot_wider(names_from = target2, values_from = c(avg_pred_affinity, std_pred_affinity, count_NA)) %>% 
+  mutate(ratio=avg_pred_affinity_MIT_Target/avg_pred_affinity_neg_ctrl,
+         diff = avg_pred_affinity_MIT_Target-avg_pred_affinity_neg_ctrl) %>% 
+  #merge with the neg_ctrl quantiles 
+  left_join(quantiles %>%
+              rename_with(~ paste0(., "_ctrl"), starts_with("q")) %>% filter(target2 =="neg_ctrl") , by = c('Assay')) 
+
+#filter based on the negative ctrl quantiles and assay in wide_data
+
+wide_q5 = wide_data %>% 
+  group_by(Assay) %>%
+  filter(avg_pred_affinity_MIT_Target <q5_ctrl, #affinity value needs to be smaller than the 5th quantile of negative controls 
+         count_NA_MIT_Target < 2,     #no more than 1 missing binding event 
+         diff < -1
+         ) %>%               #difference between MIT_Target and neg_ctrl needs to be smaller than -1 (10x times stronger)
+  ungroup() %>% 
+  mutate(affinity = 'hb') 
+
+#figure for manuscript
+```
+
+
+```{r Supplementary fig Enghelhart alphaseq preprocessing}
+wide_data %>%
+          filter(count_NA_MIT_Target <2) %>%
+          mutate(count_NA_MIT_Target= str_c(" Missing binding events (NAs) = ",as.character (count_NA_MIT_Target)),
+                 Assay = str_c("Assay ",as.character(Assay))) %>% 
+ ggplot( .)+
+  geom_point( aes(x= avg_pred_affinity_MIT_Target, y=diff, color= std_pred_affinity_MIT_Target), shape ='.', alpha=0.7) +
+  geom_vline(data=quantiles %>%
+               mutate(Assay = str_c("Assay ",as.character(Assay))) %>%
+               filter(target2== 'neg_ctrl'),
+             aes(xintercept=q5 ), linetype="dashed") +
+geom_rect(
+    data = quantiles %>%
+      mutate(Assay = str_c("Assay ", as.character(Assay))) %>%
+      filter(target2 == 'neg_ctrl'),
+    aes(
+      xmin = -Inf, xmax = q5,
+      ymin = -Inf, ymax = -1
+    ),
+    fill = NA, color = "red", linetype = "solid", size = 0.8
+  ) +
+  geom_hline(yintercept=-1 , linetype="dashed") +
+  facet_grid(vars( count_NA_MIT_Target)
+             , vars(Assay)
+             ) +
+  labs(
+    x = "Average of Target predicted affinity",
+    y = "Kd (Log10 nM) difference between Target and matched negative control",
+    color = "Std of Target\npredicted affinity"
+  )+
+  scale_color_viridis_c()+
+  theme_bw()+
+    theme(strip.background = element_rect(fill = "white"))
+
+
+
+ggsave("/doctorai/niccoloc/alphaseq_scatter_hb_selection.png", width = 10, height = 7, units = "in", dpi = 300)
+```
+
+
+```{r fasta and metadata creation  }
+hb_id = wide_q5 %>% pull(POI)  
+alphaseq2 %>% dplyr::count(CDRH3) %>% arrange(desc(n)) %>% head(10)  
+alphaseq2 %>% dplyr::count(CDRL3) %>% arrange(desc(n)) %>% head(10)  
+  
+seed_cdr3_heavy=alphaseq2 %>% dplyr::count(CDRH3) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRH3) 
+seed_cdr3_light=alphaseq2 %>% dplyr::count(CDRL3) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRL3)
+seed_cdr2_heavy=alphaseq2 %>% dplyr::count(CDRH2) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRH2)
+seed_cdr2_light=alphaseq2 %>% dplyr::count(CDRL2) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRL2)
+seed_cdr1_heavy=alphaseq2 %>% dplyr::count(CDRH1) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRH1)
+seed_cdr1_light=alphaseq2 %>% dplyr::count(CDRL1) %>% arrange(desc(n)) %>% head(3)  %>% pull(CDRL1)
+
+
+metadata_alphaseq=bind_rows(
+  wide_data %>% filter( !(POI %in% hb_id)),
+  wide_q5) %>%
+  select(-target2) %>%
+  left_join(
+    alphaseq2 %>%
+      filter(Target =='MIT_Target', Replicate == 1), by = c('POI', 'Assay')) %>%
+    select(-target2) %>%
+  mutate(affinity = case_when(
+    affinity == 'hb' ~ 'hb',
+    count_NA_MIT_Target == 3  ~ 'no',   #if no event binding, class is "no binder"
+    #if at least there is one binding event, and the affinity is higher than the 5th quantile of the negative controls,
+    #or the difference is higher than -1 ( so less than 10x times stronger towards binders), class is "low binder"
+    count_NA_MIT_Target <= 2 & (avg_pred_affinity_MIT_Target > q5_ctrl  |  diff >(-1) ) ~ 'lb', 
+    TRUE ~ 'no'
+    ),
+         cdr3_flank= str_extract(Sequence, paste0("(.{3})", CDRH3, "(.{2})")),
+         seed= str_split_i(POI, "_",1),
+         cdr3_heavy_mutated = ifelse(CDRH3 %in% seed_cdr3_heavy, F, T  ),
+         cdr3_light_mutated = ifelse(CDRL3 %in% seed_cdr3_light, F, T  ),
+         cdr2_heavy_mutated = ifelse(CDRH2 %in% seed_cdr2_heavy, F, T  ),
+         cdr2_light_mutated = ifelse(CDRL2 %in% seed_cdr2_light, F, T  ),
+         cdr1_heavy_mutated = ifelse(CDRH1 %in% seed_cdr1_heavy, F, T  ),
+         cdr1_light_mutated = ifelse(CDRL1 %in% seed_cdr1_light, F, T  ),
+         CDRH3_only_mutated=  ifelse(cdr3_heavy_mutated ==T & 
+                                       cdr3_light_mutated ==F &
+                                       cdr2_heavy_mutated ==F &
+                                       cdr2_light_mutated ==F &
+                                       cdr1_heavy_mutated ==F &
+                                       cdr1_light_mutated ==F, T, F)
+         )   %>% 
+  relocate(seed, .after =POI)
+#relocate the columns, seed must be 2nd column
+
+#check how many affinity per class
+table(metadata_alphaseq$affinity)
+
+
+metadata_alphaseq %>%  unique()
+
+metadata_alphaseq %>% fwrite("/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/metadata_alphaseq.csv")
+# create fasta
+
+
+x1= fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/metadata_alphaseq.csv") %>% 
+    mutate(paired_AB2= str_c(HC, LC,sep="[SEP]"),
+         paired_esm2= str_c(HC, LC,sep="<cls><cls>"),
+         # sequence_id= POI,
+         sequence_length= str_length(Sequence)  )
+
+
+
+seqinr::write.fasta(
+  as.list(x1$paired_AB2),
+  x1$sequence_id,
+  file = "/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_paired_chain_ab2.fasta"
+)
+
+seqinr::write.fasta(
+  as.list(x1$paired_esm2),
+  x1$sequence_id,
+  file = "/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_paired_chain_esm2.fasta"
+)
+
+seqinr::write.fasta(
+  as.list(x2$paired_esm2),
+  x2$sequence_id,
+  file = "/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/alphaseq_paired_chain_esm2_TEST.fasta"
+)
+
+
+#discard the no binders
+x1 %>% filter(affinity != 'no') %>% 
+  fwrite("/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/alphaseq_sars/metadata_alphaseq_HB_LB.csv"  )
+
+
+
+```
+
+
+```{r VArun shanker preprocessing}
+x1_full=fread('/doctorai/evgeniie/AIRR_atlas_2023/data/DMS/ab_mutagenesis_expts/cr9114/cr9114_exp_data.csv',colClasses=list(character=1))
+x1=fread('/doctorai/evgeniie/AIRR_atlas_2023/data/DMS/ab_mutagenesis_expts/cr9114/cr9114_singleMuts_exp_data.csv',colClasses=list(character=2))
+cr9114
+x2=seqinr::read.fasta(file = "/doctorai/evgeniie/AIRR_atlas_2023/data/DMS/ab_mutagenesis_expts/cr9114/cr9114_4fqi_hc_lib.fasta", seqtype = "AA", as.string = TRUE)
+
+fasta_df <- tibble::tibble(
+  genotype = names(x2),
+  Sequence = unlist(x2)
+)
+
+x1_seq=x1 %>% left_join(fasta_df)
+x1_seq_full=x1_full %>% left_join(fasta_df)
+
+
+
+x1_seq_full %>% 
+  mutate(binding_label=ifelse(h1_mean > 9, 'hb', 'lb')) %>% pull(binding_label) %>%
+  table(.)
+
+x1_metdata=x1_seq_full %>% 
+  mutate(binding_label=ifelse(h1_mean > 9, 'hb', 'lb'),
+         sequence_id=str_c("hie_",genotype, sep=""))  
+
+#fasta writing
+seqinr::write.fasta(as.list(x1_metdata$Sequence),
+                    x1_metdata$sequence_id, 
+                    file.out = "/doctorai/userdata/airr_atlas/data/sequences/bcr/hie/cr9114_hie.fasta")
+
+x1_metdata %>% fwrite("/doctorai/userdata/airr_atlas/data/sequences/bcr/hie/cr9114_hie_metadata.csv")
+# 
+# x1_metadata= fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/brian_hie/cr9114_hie_metadata.csv")
+
+x1_seq_full=x1_metadata
+
+#was x1_seq_full
+```
+
+
+```{r Supplementary fig cr9114 histogram}
+x1_seq_full %>% 
+  ggplot(aes(x = h1_mean)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,   color = 'black', alpha = 0.2) +
+  geom_density(adjust = 0.2, color = 'purple') +
+  geom_vline(xintercept = 9, linetype = 'dashed', color = 'red') +
+  ggtitle("CR9114 variants binding affinity towards influenza HA-H1 epitope, binning of high-low affinity binders")+ 
+  annotate("text",x=9.1, y=1.2, label="High affinity binders threshold", color="red", angle=90, vjust=-0.5)+
+  annotate("text",x=9.2, y=2.5, label="High affinity\nbinders", color="red"   )+
+  annotate("text",x=8.7, y=2.5 ,label="Low affinity\nbinders", color="orange"  )+
+
+  labs(x="Mean HA-H1 -logKd  ", y="Density")+
+  theme_bw()
+
+ggsave(
+  filename = "/doctorai/niccoloc/cr9114_hie_histogram_h1.png",
+  plot = last_plot(),
+  width = 10,
+  height = 7,
+  units = "in",
+  dpi = 300
+)
+```
+
+ 
+```{r covabdab}
+x1= fread('/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab/covabdab_metadata.csv')
+
+x1= fread('/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab/covabdab.csv')
+x1= x1 %>%  mutate(
+  VHorVHH_bool= ifelse(VHorVHH =='ND', 'cdr3_only', 'VH'),
+  VL_bool= ifelse(VL =='ND', 'noVL', 'VL'),
+               )  
+
+
+table(x1$`Protein + Epitope`) 
+table(x1$`Protein + Epitope`, x1$`Ab or Nb`) 
+table(x1$`Protein + Epitope`, x1$VHorVHH_bool)
+table(x1$`Protein + Epitope`, x1$VL_bool)
+
+ 
+x2= x1 %>% filter(`Protein + Epitope` %in% c('S; RBD', 'S; NTD' ),
+              `Ab or Nb` == 'Ab')  
+
+
+table(x2$`Protein + Epitope`, x2$VHorVHH_bool)
+table(x2$VL_bool, x2$VHorVHH_bool)
+
+#filter for only RBD binders
+RBD_only= x2 %>% filter(`Protein + Epitope` == 'S; RBD',
+                          `Ab or Nb` == 'Ab',
+                          VHorVHH_bool == 'VH',
+                          VL_bool == 'VL')  
+  mutate(paired_AB2= str_c(VHorVHH, VL,sep="[SEP]"),
+         paired_esm2= str_c(VHorVHH, VL,sep="<cls><cls>"),
+         sequence_id= Name) %>%
+  select(-Name)
+
+path_out = '/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab/'
+
+seqinr::write.fasta(as.list(RBD_only$paired_AB2),
+                    names = RBD_only$sequence_id, 
+                    file.out = paste0(path_out,"covabdab_RBD_paired_chain_ab2.fasta"))
+
+seqinr::write.fasta(as.list(RBD_only$paired_esm2),
+                    names = RBD_only$sequence_id, 
+                    file.out = paste0(path_out,"covabdab_RBD_paired_chain_esm2.fasta"))
+
+
+#preprocess the negative sequences -paired chains bacground 
+
+vh_mixcr = fread('/doctorai/niccoloc/mixcr_output/VH_aligned.tsv') %>% 
+    mutate(VH =str_remove(aaSeqVDJRegion,"_$")) %>% 
+  select(sequence_id = descrsR1,
+         VH,
+         HCDR3 =  aaSeqCDR3)  
+vl_mixcr = fread('/doctorai/niccoloc/mixcr_output/VL_aligned.tsv')  %>% 
+    mutate(VL =str_remove(aaSeqVDJRegion,"_$")) %>% 
+  select(sequence_id = descrsR1,
+         VL  ,
+         LCDR3 =  aaSeqCDR3)  
+ 
+bg_VH= fread('/doctorai/niccoloc/mixcr_output/VH_aligned_airr.tsv')  %>% 
+  select(-sequence_id) 
+ 
+bg_VL= fread('/doctorai/niccoloc/mixcr_output/VL_aligned_airr.tsv') %>% 
+  select(-sequence_id)
+
+
+bg_merged= 
+inner_join(
+bg_VH %>%  bind_cols(vh_mixcr),
+bg_VL %>%  bind_cols(vl_mixcr), by="sequence_id" )  %>%
+  select(sequence_id, VH, VL, HCDR3,LCDR3) %>% 
+  filter(HCDR3 != 'region_not_covered',
+        LCDR3 != 'region_not_covered',
+        VH != 'region_not_covered',
+        VL != 'region_not_covered',
+        )   %>% 
+    filter(!str_detect(VH,"\\*"),!str_detect(VL,"\\*")) %>% 
+  mutate(binding_label ="background")
+  
+cov_bg=bg_merged %>% 
+  bind_rows(RBD_only %>% 
+  select(
+     sequence_id =Name,
+     VH =VHorVHH,
+         VL,
+         HCDR3= CDRH3,
+         LCDR3= CDRL3
+         ) %>% 
+  mutate(binding_label ="covid")) %>% 
+mutate(paired_AB2= str_c(VH, VL,sep="[SEP]"),
+         paired_esm2= str_c(VH, VL,sep="<cls><cls>"),
+       VH_VL=str_c (VH, VL, sep = ""),
+       sequence_length = str_length(VH_VL),
+       hcdr3_length= str_length(HCDR3)) %>% 
+  filter(sequence_length <=254)
+   
+
+fwrite(cov_bg, "/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab_AND_background.tsv")     
+cov_bg=fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab_AND_background.tsv") 
+# Example sequences
+seq_names <-  cov_bg$sequence_id
+sequences <- cov_bg$paired_esm2
+# write embeddings_specific input files
+fileConn <- file('/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab/covabdab_bg_ESM2.fasta', "w")
+
+for (i in seq_along(cov_bg$paired_esm2)) {
+  writeLines(paste0(">", seq_names[i]), fileConn)
+  writeLines(sequences[i], fileConn)
+}
+
+close(fileConn)
+
+sequences <- cov_bg$paired_AB2
+# Write to file
+fileConn <- file('/doctorai/userdata/airr_atlas/data/sequences/bcr/antigens/covabdab/covabdab_bg_AB2.fasta', "w")
+
+for (i in seq_along(cov_bg$paired_esm2)) {
+  writeLines(paste0(">", seq_names[i]), fileConn)
+  writeLines(sequences[i], fileConn)
+}
+
+close(fileConn)
+
+```
+
+
+```{r multiple antigens dataset}
+
+db_spec = fread("/doctorai/niccoloc/merged_df_may_2024_preprocessed_V2.csv")
+table(db_spec$dataset,db_spec$specificity)
+x3 = db_spec %>% 
+  mutate(junction_length = str_length(junction_aa),
+          id = str_c(id,"_",dataset)) %>%
+  filter( dataset != 'alphaseq',
+          dataset != 'covabdab',
+    # junction_length <= 35,
+         specificity != "unkn",
+         !str_detect(junction_aa,'[X *]'),
+        ) %>%
+  select(sequence_id= id, sequence_aa=junction_aa, specificity)  %>% 
+  bind_rows(
+    cov_bg %>% 
+      select(sequence_id, sequence_aa=HCDR3, specificity=binding_label) %>% 
+      # mutate(specificity= ifelse(specificity == 'covid', 'hb', specificity) )%>% 
+      filter(specificity =='covid')
+  )
+View(x3)
+table(x3$specificity)
+
+fwrite(x3,"/doctorai/userdata/airr_atlas/data/sequences/bcr/ALL_ANTIGENS/antigen_specific_df_2025.csv")
+#write fasta
+
+seqinr::write.fasta(as.list(x3$sequence_aa),
+                    names = x3$sequence_id, 
+                    file.out = "/doctorai/userdata/airr_atlas/data/sequences/bcr/ALL_ANTIGENS/antigen_specific_2025.fasta")
+
+
+x1= fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/ALL_ANTIGENS/antigen_specific_df_2025.csv")
+table(x1$specificity)
+
+
+```
+
+
+```{r get vgene function}
+
+
+# Helper for string paste
+`%+%` <- function(a, b) paste0(a, b)
+
+# Main function
+extract_gene_segment <- function(column, segment = c("V", "D", "J")) {
+  segment <- match.arg(segment)
+
+  # Define regex pattern based on segment
+  pattern <- switch(
+    segment,
+    V = "IGHV[0-9-]+",
+    D = "IGHD[0-9-]+",
+    J = "IGHJ[0-9-]+"
+  )
+
+  # Extract matching gene
+  sub("^(.*)(" %+% pattern %+% ").*$", "\\2", column)
+}
+
+```
+
+
+
+```{r generate iReceptor dataset for fig 3}
+library(seqinr , lib.loc = '/doctorai/niccoloc/libR2/')
+
+# 10 M pre post selection generated from default IGH model from SONNIA
+pre<-fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/simulated/giulio/preselection.csv"  ) 
+pre<-pre %>% mutate(sequence_id = str_c("pre_",1:nrow(.)))
+post<-fread("/doctorai/userdata/airr_atlas/data/sequences/bcr/simulated/giulio/postselection.csv"   )
+post<- post %>% mutate(sequence_id = str_c("post_",1:nrow(.)))
+
+
+seqinr::write.fasta(as.list(pre$amino_acid),
+                    names = pre$sequence_id, 
+                    file.out ="preselection.fasta")
+seqinr::write.fasta(as.list(post$amino_acid),
+                    names = post$sequence_id, 
+                    file.out = "postselection.fasta")
+
+
+set.seed(123)
+pre1M= pre %>%  sample_n(1000000) 
+post1M= post %>%  sample_n(1000000) 
+
+
+#write fasta
+seqinr::write.fasta(as.list(pre1M$amino_acid),
+                    names = pre1M$sequence_id, 
+                    file.out = "preselection_1M.fasta")
+seqinr::write.fasta(as.list(post1M$amino_acid),
+                    names = post1M$sequence_id, 
+                    file.out = "postselection_1M.fasta")
+
+
+head(pre1M)
+
+
+#synthetic PRE-POST
+
+sonia_2M=bind_rows(
+  pre1M %>% mutate(specificity="pre"),
+  post1M %>% mutate(specificity="post")
+)
+fwrite(sonia_2M, "/doctorai/niccoloc/prepost_sonia_2M.csv")
+
+#write fasta
+seqinr::write.fasta(as.list(sonia_2M$amino_acid),
+                    names = sonia_2M$sequence_id, 
+                    file.out = "/doctorai/niccoloc/prepost_sonia_2M.fasta")
+
+
+# reload with the pgen calculated
+sonia_2M=fread('/doctorai/niccoloc/prepost_sonia_2M_pgens_OK.csv') %>% distinct()
+sonia_2M %>% fwrite("/doctorai/niccoloc/prepost_sonia_2M_pgens_OK2.csv")
+
+
+
+
+
+
+new_ireceptor_2= fread('/scratch/jahnz/ireceptor_filtering/data/ireceptor_2151099_combined_final.tsv',
+                       select= c('sequence_id','junction_aa'))
+#write fasta 
+seqinr::write.fasta(as.list(new_ireceptor_2$junction_aa),
+                    names = new_ireceptor_2$sequence_id, 
+                    file.out = "/doctorai/niccoloc/ireceptor_NEW_final.fasta")
+
+#input for tsne mapping
+new_ireceptor_2 %>% 
+  fwrite("/doctorai/niccoloc/ireceptor_NEW_final_onlyseqid.csv")
+
+new_ireceptor_sonia= fread('/scratch/jahnz/ireceptor_filtering/data/ireceptor_2151099_combined_final.tsv',
+                       select= c('sequence_id','junction_aa','v_call',
+                                 'j_call', 'd_call'))
+
+new_ireceptor_sonia=new_ireceptor_sonia %>% 
+  rename(
+    sequence_aa = junction_aa
+  ) %>%
+  mutate(
+    v_gene= extract_gene_segment(v_call, segment = "V"),
+    d_gene= extract_gene_segment(d_call, segment = "D"),
+    j_gene= extract_gene_segment(j_call, segment = "J"),
+  )
+
+#input for SONIA pgen calculation
+new_ireceptor_sonia %>% 
+  select(amino_acid=sequence_aa,  v_gene, j_gene, sequence_id)  %>% 
+  # slice_head(n=10000) %>% 
+  fwrite("/doctorai/niccoloc/ireceptor_NEW_sonia_INPUT.csv")
+
+
+
+
+
+
+
+
+
+#definitive iReceptor metadata
+
+new_df= fread('/scratch/jahnz/ireceptor_filtering/data/combined_airr_filtered_3017957_final.tsv',
+                       select= c('sequence_id','junction_aa',
+                                 'v_call', 'j_call', 'd_call',"c_call",
+                                 "v_mutations_count", "j_mutations_count","v_mutations")) %>% 
+  mutate(
+    v_gene= extract_gene_segment(v_call, segment = "V"),
+    d_gene= extract_gene_segment(d_call, segment = "D"),
+    j_gene= extract_gene_segment(j_call, segment = "J"),
+    tot_mut=v_mutations_count+ j_mutations_count
+  ) %>% 
+  select(-v_call,-d_call, -j_call) %>% 
+  left_join(
+  fread('/doctorai/niccoloc/ireceptor_NEW_pgens.csv') %>% 
+    select ( sequence_id ,Q,pgen,ppost)
+)
+
+
+
+
+table(new_df$v_mutations)
+
+#add the xy coords from the TSNE and the pgens
+ireceptor_xy= fread('/doctorai/niccoloc/vae_umap_dfs/tsne_Ireceptor_ab2.csv')   
+ireceptor_xy %>%
+  rename(pgen_old=pgen) %>%
+  left_join(new_df %>% select(-junction_aa), by="sequence_id") %>% distinct() %>%   
+  fwrite("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_ab2.csv")
+
+ireceptor_xy= fread('/doctorai/niccoloc/vae_umap_dfs/tsne_Ireceptor_esm2.csv')   
+ireceptor_xy %>% 
+  rename(pgen_old=pgen) %>%
+  left_join(new_df %>% select(-junction_aa), by="sequence_id")%>% distinct() %>%  
+  fwrite("/doctorai/niccoloc/vae_umap_dfs/ireceptor_NEW_final_xy_esm2.csv")
+
+
+
+ 
+```

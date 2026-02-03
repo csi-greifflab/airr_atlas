@@ -1,0 +1,1779 @@
+---
+title: "Vicinity_plots"
+output: html_document
+date: "2025-10-27"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+obj_name <- load("/doctorai/niccoloc/Vicinity_main_fig.rds")
+v1 <- get(obj_name)
+print(v1)
+```
+
+
+
+```{r Vicinity Density}
+library(foreach , lib.loc = "/doctorai/niccoloc/libR2")
+library(doParallel , lib.loc = "/doctorai/niccoloc/libR2" )
+library(data.table , lib.loc = "/doctorai/niccoloc/libR2")
+library(dplyr , lib.loc = "/doctorai/niccoloc/libR2")
+library(stringr , lib.loc = "/doctorai/niccoloc/libR2")
+library(ggplot2 , lib.loc = "/doctorai/niccoloc/libR2")
+library(tidyr , lib.loc = "/doctorai/niccoloc/libR2")
+library(withr , lib.loc = "/doctorai/niccoloc/libR2")
+library(farver , lib.loc = "/doctorai/niccoloc/libR2")
+
+library(patchwork , lib.loc = "/doctorai/niccoloc/libR2")
+library(viridis , lib.loc = "/doctorai/niccoloc/libR2")
+# library(Peptides, lib.loc= "/doctorai/niccoloc/libR")
+
+download_rstudio_file <- function(filepath, download_name = NULL, host = "http://localhost:8787") {
+  if (is.null(download_name)) {
+    download_name <- basename(filepath)
+  }
+  
+  url <- sprintf(
+    "%s/export/%s?name=%s&file=%s",
+    host,
+    download_name,
+    download_name,
+    URLencode(filepath)
+  )
+  
+  if (.Platform$OS.type == "windows") {
+    shell(sprintf('start "" "%s"', url), wait = FALSE)
+  } else if (Sys.info()[["sysname"]] == "Darwin") {
+    system(sprintf('open "%s"', url), wait = FALSE)
+  } else {
+    system(sprintf('xdg-open "%s"', url), wait = FALSE)
+  }
+  
+  message("✅ Download triggered in your browser for: ", download_name)
+}
+
+
+#density sampling proportion
+sample_proportion =0.25
+
+# Define the directory containing the files
+directory <-c( "/doctorai/niccoloc/Vicinity_results_100k_Density2",
+               "/doctorai/niccoloc/Vicinity_results_100k_Density2_cdr3",
+               "/doctorai/niccoloc/vicinity_from_fox",
+               "/doctorai/niccoloc/vicinity_fox_NA"
+               )
+
+
+# Get a list of all files in the directory
+files <- list.files(directory, full.names = TRUE, recursive = TRUE)
+
+dirs_vicinity=list.dirs(directory,full.names = TRUE, recursive = TRUE)[-1]
+
+#filter for only result dirs for each layer
+dirs_vicinity = dirs_vicinity[str_detect(dirs_vicinity, 'layer_')]
+
+
+#find only the files starting with summary_results_ED
+files_summary <- files[str_detect(files, 'summary_results_ED')]
+
+
+# Initialize an empty list to store data frames
+data_list <- list()
+summary_data1 = list()
+
+
+# Function to extract metadata from filename
+extract_metadata <- function(filepath) {
+    # Extract the filename from the full path
+    filename <- basename(filepath) %>% str_remove("summary_results_ED_") %>% str_remove(".csv")
+    #split it
+    parts <- strsplit(filename, "_")[[1]] 
+    len_parts= length(parts)
+    metadata <- c(
+        type = parts[1],
+        model = parts[2],
+        chain = str_c(parts[3:(max(len_parts)-2)], collapse = "_"),
+        layer_number = as.numeric(parts[max(len_parts)])+1
+    )
+    return(metadata)
+}
+
+#parallelization
+stopCluster(cl)
+num_cores <- 32
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+clusterEvalQ(cl, .libPaths("/doctorai/niccoloc/libR2"))
+
+
+
+# Loop through each file and read the data
+LD_is_loaded = FALSE
+chosen_LD_density=1
+# for (dir in dirs_vicinity) {
+
+# Initialize an empty list to store data frames
+data_list <- list()
+summary_data1 = list()
+error_list=c()
+
+
+results_list <- foreach(dir = dirs_vicinity,
+                        .packages = c("data.table", "dplyr", "stringr", "tidyr")
+                        # .export = c("metadata")
+                        # .errorhandling =  "remove"
+                        # verbose = T
+                        ) %dopar% {
+    tryCatch({
+    files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+    summary_path <- files[str_detect(files, 'summary_results_ED')]
+    # Read the data
+    data <- fread(summary_path)
+    # Extract metadata from the filename
+    metadata <- extract_metadata(summary_path)
+    #checking which folder is running
+    print(paste0("Running folder: ", dir))
+    # Add metadata to the data frame
+    metadata_tmp <- data %>%
+        mutate(
+        Threshold_original = Threshold,
+        type = ifelse(metadata[1] =="AttentionMat", "Att_mat", metadata[1]),
+        model = metadata[2],
+        chain = str_to_lower(metadata[3]),
+        layer = metadata[4], 
+        Threshold =  V1,
+        Vicinty_corr_hb= (Perc_hb * ( 100- NULLPerc_hb)),
+        chain = str_remove(chain, "t33_650m_ur50d_") #remove long name of esm2
+        )
+
+    if (str_detect(dir,  'Density2_cdr3'))  {
+      metadata_tmp$chain = 'cdr3_extracted'
+    } 
+    # Append the data frame to the list
+    summary_data1 <- append(summary_data1, list(metadata_tmp))
+    raw_data_path <- files[str_detect(files, 'raw_perc')]
+    raw_data <- fread(raw_data_path)
+    id_link_path <- files[str_detect(files, 'id_index_sample')]
+    id_link_path <- files[str_detect(files, 'index_sequence_id')]
+    # id_link <- fread(id_link_path)
+    # # density_path <- files[str_detect(files, 'neighbors_diag.*lin0')]  
+    # density_lin <- fread(files[str_detect(files, 'neighbors_diag_lin0')] ) %>% mutate(method = "lin0")
+    # density_knn <- fread(files[str_detect(files, 'neighbors_diag_NN10_')] ) %>% mutate(method = "NN10")
+    density_LD1 <- fread(files[str_detect(files, 'neighbors_diag.*LD1')] ) %>% mutate(method = "LD1")
+    # density_LD2 <- fread(files[str_detect(files, 'neighbors_diag.*LD2')] ) %>% mutate(method = "LD2")
+    
+
+    # Combine all density data frames
+    
+    # density = bind_rows(density_lin, density_knn, density_LD1, density_LD2)  
+    density = density_LD1
+    
+    
+    # Calculate inverse weights and normalized sampling probabilities
+    df_sample =  density %>%
+      group_by(method) %>%
+      mutate(
+        inverse_weight = 1 / (Neighbors_Count + 1e-8),
+        sampling_prob = inverse_weight / sum(inverse_weight),
+        ID = row
+      ) %>%  ungroup()
+    
+    # Sample rows based on the computed probabilities (without replacement)
+    sampled_df <- df_sample %>%
+      group_by(method) %>%
+      slice_sample(prop = sample_proportion,
+                   weight_by = sampling_prob,
+                   replace = F) %>%
+      ungroup()
+    
+    
+    p_dens1 =
+      sampled_df %>%
+      left_join(
+        raw_data %>%
+          mutate(
+            Threshold = Threshold - 1,
+            perc_all = ifelse(is.na(Percentage), 0, Percentage),
+        
+          )
+        
+        ,
+        by = 'ID',
+        relationship = "many-to-many"
+      )  %>%
+      filter(Affinity == 'hb') %>%
+      group_by(Affinity, Threshold, method) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+      ) %>%
+      ungroup() %>%
+      left_join(metadata_tmp %>%
+                  dplyr::select(Threshold, Threshold_original, layer, type,model,chain, Mean_Num_Points),
+                by = "Threshold")
+
+  print(p_dens1)
+  p_dens1
+  # return(p_dens1)
+    }, error = function(e) {
+    warning("Error in dir=", dir, ": ", e$message)
+    error_list= append(error_list, dir)
+    NULL    # skip this iteration
+  })
+}
+
+
+#change list name as their dirs
+names(results_list) <- dirs_vicinity %>%  basename()
+ stopCluster(cl)
+ 
+ 
+#filter out results_list that have NULL
+results_list <- results_list[!sapply(results_list, is.null)]
+ 
+ 
+Pbox_data = bind_rows(results_list) %>%
+  mutate(layer= as.numeric(layer),
+         chain = ifelse(chain =='heavy', 'heavy_chain', chain)) %>%
+  filter(method == "LD1")%>%  #choose average LD1 density
+  group_by(model) %>% 
+    mutate(layer_norm2 = (layer - min(layer)) / (max(layer) - min(layer)) * 100) %>% ungroup() #layer normalization
+
+fwrite("/doctorai/niccoloc/Vicinity_results_TZ_ALL.csv", Pbox_data)
+ 
+summary_data = bind_rows(summary_data1)
+```
+
+
+
+```{r LD metadata}
+chosen_LD_density=1
+sample_proportion =0.25
+LD_densities = c(1)
+
+# if (LD_is_loaded == FALSE) 
+sample_sizes = c( 2000, 5000, 10000, 25000, 50000, 100000)
+
+LD_res= list()
+  
+# for (size in sample_sizes) {  
+for (chosen_LD_density in LD_densities) {  
+
+  dir = '/doctorai/niccoloc/Vicinity_results_sample_test/LD_score_500'
+  files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+  LD_density=  fread(  files[str_detect(files, 'd_whole_LD_stats_.*.csv')] ) 
+  LD_summary = fread(    files[str_detect(files, 'd_mean1_summary.*.csv')] )  
+  
+ LD_summary1=LD_summary %>% 
+  select(-num_nan_HB) %>%
+  tidyr::pivot_longer(cols = matches(".*_(h|l)b$"),  ,
+               names_to = c("Metric", "Affinity"),
+               names_sep = "_",
+               values_to = "Value") %>% 
+  mutate(  
+  type = 'LD',
+  method = paste0("LD-", chosen_LD_density),
+  chain = 'cdr3',
+  # model = 'ab2',
+  layer = NA) %>% 
+  dplyr::select(V1,Threshold,chain,layer, type,method,  Metric, Affinity, Value)  %>%
+  tidyr::pivot_wider(names_from = Metric, values_from = Value) %>% 
+  rename(Vicinity =Perc , Loneliness = NULLPerc, AvgNN = AvgPoints)  %>%  #rename the columns from raw vicinity pipeline output
+    mutate(Vicinty_corr= (Vicinity * ( 1- Loneliness))*100 )%>% #old
+    dplyr::select(-chain) %>%
+  crossing(model = c('esm2', 'antiberta2-cssp'),    #create all combinations of model and chain
+           chain = c('cdr3', 'all_cdrh','heavy_chain', 'paired_chain','cdr3_extracted'))
+
+
+ # computing density-based sampling
+LD_sample=LD_density %>% 
+  filter(Threshold <=chosen_LD_density) %>%  #only selecting points as 1 LD away to get the density
+  # group_by(Threshold) %>%
+  mutate(
+    inverse_weight = 1 / (Neighbors + 1e-8),
+    sampling_prob = inverse_weight / sum(inverse_weight),
+    ID= local_index
+  ) %>%  
+  ungroup()  %>% 
+  slice_sample(prop= sample_proportion, weight_by = sampling_prob, replace = F) 
+
+
+#collect the precision scores and compute Vicinity_score 
+LD_plot1= LD_density %>%
+  filter(
+    local_index %in% LD_sample$local_index, # choose the sequences sampled by density
+         ) %>% 
+  mutate(
+         perc_all= ifelse(is.na(Percentage), 0, Percentage  ),
+         NN_na = ifelse(is.na(Percentage), NA,Neighbors)) %>%  
+    group_by(Affinity, Threshold) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+        # AvgNN = mean(NN_na, na.rm =T),
+      ) %>%
+      ungroup() %>%  
+  left_join(LD_summary1 %>% 
+              select(Threshold,layer,type,model,chain,method,Affinity,AvgNN,Loneliness ,Vicinty_corr), by = c("Threshold", "Affinity"))
+
+  LD_is_loaded = TRUE  
+  LD_res[[as.character(chosen_LD_density)]] = LD_plot1
+}
+
+LD_plot = bind_rows(LD_res)
+
+fwrite("/doctorai/niccoloc/Vicinity_results_LD_plot.csv", LD_plot)
+
+
+```
+
+
+
+
+```{r Vicinity Density}
+best_median=
+  Pbox_data %>% 
+    mutate(IQR = Q3 - Q1,
+         score_ratio = median - IQR) %>%
+  group_by(Affinity,method,chain,model,type, layer) %>%
+  summarise(sum_median= mean(median),
+            sum_iqr =mean(IQR),
+            # M_c= mean(median/(IQR+0.0001))
+            ) %>%
+  group_by(Affinity,method,chain,model,type) %>%  
+  arrange(desc(sum_median), (sum_iqr)) %>%
+  # arrange(desc(M_c )) %>%
+  # slice_max(median,  n = 1 , with_ties = F) %>%  ungroup()  
+  slice_head(   n =1  ) %>%  ungroup()   
+
+
+
+
+
+LD_color= 'red'
+
+
+Density_p1=Pbox_data   %>% 
+  inner_join(best_median %>% 
+             dplyr::select(method,model,chain,type,layer, Affinity), 
+             by = c('method','model', 'chain',"type" ,"layer", "Affinity")) %>%  
+         bind_rows(LD_plot %>%
+                     rename( Mean_Num_Points = AvgNN,)%>% 
+                     filter(Threshold <=4) #select only up to LD4, not to mess up the quantifications
+                   ) %>%  
+         filter(
+           method  %in% c('LD1','LD-1'),
+                Affinity =='hb',
+                ) %>% 
+         mutate(layer= as.numeric(layer),
+                IQR= Q3 - Q1)
+                
+
+p4_1=
+ggplot( 
+  Density_p1 ,
+       aes(x = Mean_Num_Points, y = median, 
+           color = type,
+           group =  type , 
+           # linetype = type  
+           )) +
+  geom_line(data=. %>% filter (type != "LD"),linewidth = 0.75) +                             # Connect the median values
+  # geom_point(size =0.4) +                            # Show the median points
+  geom_errorbar(aes(ymin = Q1, ymax = Q3 ,
+                    # linetype = type
+                    ),    # Error bars from Q1 to Q3
+                linetype = "dashed",
+                width = 50,
+                alpha=1,
+                linewidth = 0.2,  show.legend = FALSE) +
+  geom_point(data=. %>% filter (type == "LD"), size =0.4,  ) +                            # Show the median points
+  geom_errorbar(data=. %>% filter (type == "LD"), aes(ymin = Q1, ymax = Q3 ,
+                                                      # linetype = type
+                                                      ),    # Error bars from Q1 to Q3
+                width = 50,
+                alpha=0.8,
+                linewidth = 0.6,color =  LD_color ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(type =='LD' ),
+    aes(x = Mean_Num_Points, y = median, label = Threshold),color =LD_color ,min.segment.length = 0, force_pull =-0.1, force=5,nudge_x=-0.2
+
+  ) +
+  
+  facet_grid(vars(model),vars(chain), scales = "free_x") +
+  ylim(0, 1) +
+  coord_cartesian(xlim= c(-150,1450))+
+  # labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
+  theme_bw() +
+  scale_color_gradient (low = "green4",  high = "blue" , limits= c(0,100), na.value = "red") +
+  # scale_color_manual(values = c("Unpooled" = "blue", 
+  #                                     "Pooled" = "green4", 
+  #                                     "Att_mat" = "orange",
+  #                                     "LD"= LD_color),
+  #                    name = "Embedding\ncomplexity",
+  #                    labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled') 
+  #                    ) +
+    scale_color_manual(values = c("Unpooled" = "green4", 
+                                      "Pooled" = "blue", 
+                                      "Att_mat" = "orange",
+                                      "LD"= LD_color),
+                     name = "Embedding\ncomplexity",
+                     labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled') 
+                     ) +
+  labs(
+    # title = "Distribution of Vicinity scores across models, complexities, input sequences, and model layers",
+       y="Vicinity score",
+       x='Average number of nearest neighbours')+
+  facet_grid(vars(model), vars(chain),
+              labeller = as_labeller(c(
+                "antiberta2-cssp" = "AB2", esm2 = "ESM2",
+                all_cdrh = "All HCDR", paired_chain = "Paired Chain",
+                cdr3_pooled = "HCDR3\nExtracted", cdr3 = "HCDR3 Only",
+                cdr3_extracted = "HCDR3\nExtracted",
+                heavy_chain = "Heavy Chain"))
+             ) +
+  theme_bw()+
+  theme(strip.background =element_rect(fill="white"))+
+  guides(shape = guide_legend(order = 1),
+         linetype = guide_legend(order = 1,override.aes = list(alpha = 1)))
+
+p4_1
+LD_color= 'red'
+
+ggsave("/doctorai/niccoloc/figures/airr_atlas/Vicinity_DENSITY_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+
+save(p4_1, file= "/doctorai/niccoloc/Vicinity_main_fig.rds")
+download_rstudio_file(
+  "/doctorai/niccoloc/Vicinity_main_fig.rds",
+  "Vicinity_main_fig.rds"
+)
+
+
+
+```
+
+```{r}
+p4_chains=
+ggplot( 
+  Density_p1 ,
+       aes(x = Mean_Num_Points, y = median, 
+           color = chain,
+           # group =  type , 
+           # linetype = type  
+           )) +
+  geom_line(data=. %>% filter (type != "LD"),linewidth = 0.75) +                             # Connect the median values
+  # geom_point(size =0.4) +                            # Show the median points
+  geom_errorbar(aes(ymin = Q1, ymax = Q3 ,
+                    # linetype = type
+                    ),    # Error bars from Q1 to Q3
+                linetype = "dashed",
+                width = 50,
+                alpha=1,
+                linewidth = 0.2,  show.legend = FALSE) +
+  # geom_point(data=. %>% filter (type == "LD"), size =0.4,  ) +                            # Show the median points
+  # geom_errorbar(data=. %>% filter (type == "LD"), aes(ymin = Q1, ymax = Q3 ,
+  #                                                     # linetype = type
+  #                                                     ),    # Error bars from Q1 to Q3
+  #               width = 50,
+  #               alpha=0.8,
+  #               linewidth = 0.6,color =  LD_color ) +
+  # ggrepel::geom_text_repel(
+  #   data = . %>%
+  #     filter(type =='LD' ),
+  #   aes(x = Mean_Num_Points, y = median, label = Threshold),color =LD_color ,min.segment.length = 0, force_pull =-0.1, force=5,nudge_x=-0.2
+  # 
+  # ) +
+  
+  facet_grid(vars(model),vars(type), scales = "free_x") +
+  ylim(0, 1) +
+  coord_cartesian(xlim= c(-150,1450))+
+  # labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
+  theme_bw() +
+  scale_color_gradient (low = "green4",  high = "blue" , limits= c(0,100), na.value = "red") +
+  # scale_color_manual(values = c("Unpooled" = "blue", 
+  #                                     "Pooled" = "green4", 
+  #                                     "Att_mat" = "orange",
+  #                                     "LD"= LD_color),
+  #                    name = "Embedding\ncomplexity",
+  #                    labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled') 
+  #                    ) +
+    scale_color_manual(values = c("Unpooled" = "green4", 
+                                      "Pooled" = "blue", 
+                                      "Att_mat" = "orange",
+                                      "LD"= LD_color),
+                     name = "Embedding\ncomplexity",
+                     labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled') 
+                     ) +
+  labs(
+    title = "Distribution of Vicinity scores across models, complexities, input sequences, and model layers",
+       y="Vicinity score",
+       x='Average number of nearest neighbours')+
+  facet_grid(vars(model), vars(chain),
+              labeller = as_labeller(c(
+                "antiberta2-cssp" = "AB2", esm2 = "ESM2",
+                all_cdrh = "All HCDR", paired_chain = "Paired chain",
+                cdr3_pooled = "HCDR3 Extracted", cdr3 = "HCDR3 Only",cdr3_extracted = "HCDR3 Extracted",
+                heavy_chain = "Heavy Chain"))
+             ) +
+  theme_bw()+
+  theme(strip.background =element_rect(fill="white"))+
+  guides(shape = guide_legend(order = 1),
+         linetype = guide_legend(order = 1,override.aes = list(alpha = 1)))
+
+p4_chains
+```
+
+
+
+ 
+```{r supplementary layers order}
+
+
+
+#latest version
+
+
+p1=Pbox_data %>% 
+  #convert layer to factor and order numerically
+  mutate(layer = as.numeric(layer)) %>%
+  mutate(layer = factor(layer, levels = sort(unique(layer))),
+         type = ifelse (type =='Att_mat','Attention matrix' ,type),
+         ) %>%
+  filter( model =='antiberta2-cssp',
+         Affinity =="hb"
+         ) %>% 
+  group_by(model, chain, type, layer) %>% 
+  summarise(
+     median_mean = mean(median ) ,
+     max1= max(median, na.rm = TRUE),
+
+  ) %>% #View()
+  ggplot()+
+  geom_line( aes(layer, y = (median_mean), color= type, group =type, linetype = type), position = "dodge") +
+  geom_point( data = . %>% 
+               group_by(model, chain, type) %>% 
+               slice_max(median_mean, n = 1, with_ties = FALSE) %>% 
+                mutate(best_layer ="Selected layer"),
+    
+    aes(x = layer, y = median_mean ,group = type , shape = best_layer ),color ='black', size = 3.5) +
+ scale_color_manual(name = "Embedding \ncomplexity",
+                     values = c('Attention matrix' = 'orange', # Pick appropriate colors
+                                'Unpooled' = 'green4',
+                                'Pooled' = 'blue'
+                                # 'LD' = 'green'
+                                ),
+                    ) +
+    scale_shape_manual(name ="",
+                     values = "★"  ) +
+  scale_linetype_manual(name = "Embedding \ncomplexity",
+                        values = c('Attention matrix' = 'dashed',
+                                   'Unpooled' = 'solid',
+                                   'Pooled' = 'dotted'
+                                  ),
+                        ) +
+  
+  labs(y = "Mean of Vicinity scores", x = 'Layer') +
+  facet_grid(chain ~ model, scales = "free",
+             labeller = as_labeller(c(
+               "antiberta2-cssp" = "AB2", 
+               esm2 = "ESM2",
+               all_cdrh = "All HCDR", paired_chain = "Paired Chain",
+               cdr3_pooled = "HCDR3 Extracted", cdr3 = "HCDR3 Only", cdr3_extracted = "HCDR3\nExtracted",
+               heavy_chain = "Heavy Chain"))) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))  
+
+
+
+
+p2 = Pbox_data %>% 
+  mutate(layer = as.numeric(layer)) %>%
+  mutate(layer = factor(layer, levels = sort(unique(layer))),
+         type = ifelse (type =='Att_mat','Attention matrix' ,type), 
+         ) %>%
+  filter(model != 'antiberta2-cssp',
+         Affinity == "hb") %>%
+  group_by(model, chain, type, layer) %>%
+  # summarise(median = mean(median / (Q3 - Q1 + 1e-13))) %>%
+  summarise(     median_mean = mean(median ) ,
+     max1= max(median, na.rm = TRUE),) %>%
+  ggplot() +
+  geom_line(aes(x = layer, y = median_mean, color = type, linetype = type, group = type)) +
+  geom_point( data = . %>% 
+               group_by(model, chain, type) %>% 
+               slice_max(median_mean, n = 1, with_ties = FALSE) %>% 
+                mutate(best_layer ="Selected layer"),
+    
+    aes(x = layer, y = median_mean ,group = type ,shape = best_layer  ),color ='black', size = 3.5  , show.legend = F)+
+  facet_grid(chain ~ model, scales = "free") +
+  scale_shape_manual(name ="",
+                     values = "★"  ) +
+  
+  scale_color_manual(name = "Embedding \ncomplexity",
+                     values = c('Attention matrix' = 'orange', # Pick appropriate colors
+                                'Unpooled' = 'green4',
+                                'Pooled' = 'blue'
+                                # 'LD' = 'green'
+                                ),
+                     ) +
+  scale_linetype_manual(name = "Embedding \ncomplexity",
+                        values = c('Attention matrix' = 'dashed',
+                                   'Unpooled' = 'solid',
+                                   'Pooled' = 'dotted'
+                                  ),
+                       ) +
+  
+  labs(
+    y="",
+       x = 'Layer') +
+  facet_grid(chain ~ model, scales = "free",
+             labeller = as_labeller(c(
+               "antiberta2-cssp" = "AB2", 
+               esm2 = "ESM2",
+               all_cdrh = "All HCDR", paired_chain = "Paired Chain",
+               cdr3_pooled = "HCDR3\nExtracted", cdr3 = "HCDR3 Only", cdr3_extracted = "HCDR3\nExtracted",
+               heavy_chain = "Heavy Chain"))) +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))  
+  
+  # guides(color = guide_legend(override.aes = list(linetype = c('dashed', 'solid', 'dotted' ))))
+
+
+#add shared legend
+P3=p1 +p2 +plot_layout(guides = "collect")  &            # collect all guides into one
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, vjust = 0)) # rotate x tick labels by 45 degrees
+P3
+
+ggsave("/doctorai/niccoloc/figures/airr_atlas/TZ_supplementary_layers.png", last_plot(),  width =10, height =6.25, units = "in", dpi = 300)
+
+save(P3, file= "/doctorai/niccoloc/TZ_supplementary_layers.rds")
+
+
+download_rstudio_file(
+  "/doctorai/niccoloc/TZ_supplementary_layers.rds",
+  "TZ_supplementary_layers.rds"
+)
+
+ 
+
+
+p1=Pbox_data_DMS %>% 
+  #convert layer to factor and order numerically
+  mutate(layer = as.numeric(layer)) %>%
+  mutate(layer = factor(layer, levels = sort(unique(layer))),
+         type = ifelse (type =='Att_mat','Attention matrix' ,type),
+         
+        DMS = factor( DMS, levels = c( "porebski","brian_hie","alphaseq", "covabdab")),        
+         ) %>%
+  filter( model =='antiberta2-cssp',
+         Affinity  %in% c('hb','covid')
+         ) %>% 
+  group_by(model, DMS, type, layer) %>% 
+  summarise(
+    # median = mean(median, na.rm = TRUE),
+     # median= mean(median/(Q3-Q1+0.0000000000001),)
+     median_mean = mean(median )
+
+  ) %>% #View()
+  ggplot()+
+  geom_line( aes(layer, y = (median_mean), color= type, group =type, linetype = type), position = "dodge") +
+  geom_point( data = . %>% 
+               group_by(model, DMS, type) %>% 
+               slice_max(median_mean, n = 1, with_ties = FALSE) %>% 
+                mutate(best_layer ="Selected layer"),
+    
+    aes(x = layer, y = median_mean ,group = type , shape = best_layer ),color ='black', size = 3.5) +
+
+  # ylim(0.25,2)+
+  # coord_cartesian(ylim =c(0.55,1))+
+ scale_color_manual(name = "Embedding\ncomplexity",
+                     values = c('Attention matrix' = 'orange', # Pick appropriate colors
+                                'Unpooled' = 'green4',
+                                'Pooled' = 'blue'
+                                # 'LD' = 'green'
+                                ),
+                     # labels = c('Attention matrix', 'Unpooled', 'Pooled' )
+                    ) +
+  scale_linetype_manual(name = "Embedding\ncomplexity",
+                        values = c('Attention matrix' = 'dashed',
+                                   'Unpooled' = 'solid',
+                                   'Pooled' = 'dotted'
+                                  ),
+                        # labels = c('Attention matrix', 'Unpooled', 'Pooled')SARS-CoV-2 RBD\nCov-AbDab
+                        ) +
+    scale_shape_manual(name ="",
+                     values = "\u2605"  ) +
+  labs(y = "Mean of Vicinity scores", x = 'Layers') +
+  facet_grid(vars(DMS),vars(model),scales ='free_y',labeller = as_labeller(c(
+                "antiberta2-cssp" = "AB2", esm2 = "ESM2",
+                brian_hie = "InfluenzaHA\nShanker", porebski = "HER2-Porebski",alphaseq ="SARS-CoV-2\nEngelhart", covabdab ="SARS-CoV-2 RBD\nCov-AbDab")))+
+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))  
+
+
+
+
+p2 = Pbox_data_DMS %>% 
+  mutate(layer = as.numeric(layer)) %>%
+  mutate(layer = factor(layer, levels = sort(unique(layer))),
+         type = ifelse (type =='Att_mat','Attention matrix' ,type),
+        DMS = factor( DMS, levels = c( "porebski","brian_hie","alphaseq", "covabdab")),        
+         
+         ) %>%
+  filter(model != 'antiberta2-cssp',
+         
+         
+         Affinity  %in% c('hb','covid')) %>%
+  group_by(model, DMS, type, layer) %>%
+  # summarise(median = mean(median / (Q3 - Q1 + 1e-13))) %>%
+  summarise(median_mean = mean(median  )) %>%
+  ggplot(.) +
+  geom_line(aes(x = layer, y = median_mean, color = type, linetype = type, group = type)) +
+  geom_point( data = . %>% 
+               group_by(model, DMS, type) %>% 
+               slice_max(median_mean, n = 1, with_ties = FALSE) %>% 
+                mutate(best_layer ="Selected layer"),
+    
+    aes(x = layer, y = median_mean ,group = type , shape = best_layer ),color ='black', size = 3.5, show.legend = F)+
+  
+  scale_color_manual(name = "Embedding\ncomplexity",
+                     values = c('Attention matrix' = 'orange', # Pick appropriate colors
+                                'Unpooled' = 'green4',
+                                'Pooled' = 'blue'
+                                # 'LD' = 'green'
+                                ),
+                      # labels = c('Attention\nmatrix', 'Unpooled', 'Pooled')
+                     ) +
+  scale_linetype_manual(name = "Embedding\ncomplexity",
+                        values = c('Attention matrix' = 'dashed',
+                                   'Unpooled' = 'solid',
+                                   'Pooled' = 'dotted'
+                                  ),
+                       # labels = c('Attention\nmatrix', 'Unpooled', 'Pooled')
+                       ) +    scale_shape_manual(name ="",
+                     values = "\u2605"  ) +
+
+  labs(
+    #y = "Mean of Vicinity scores's median / IQR",
+    y="",
+       x = 'Layers') +
+  facet_grid(vars(DMS),vars(model),scales ='free_y',labeller = as_labeller(c(
+                "antiberta2-cssp" = "AB2", esm2 = "ESM2",
+                brian_hie = "InfluenzaHA\nShanker", porebski = "HER2-Porebski",alphaseq ="SARS-CoV-2\nEngelhart", covabdab ="SARS-CoV-2 RBD\nCov-AbDab")))+
+
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"))  
+  
+  # guides(color = guide_legend(override.aes = list(linetype = c('dashed', 'solid', 'dotted' ))))
+
+
+#add shared legend
+P4=p1 +p2 +plot_layout(guides = "collect")  &            # collect all guides into one, and rotate the x tick by 45 degrees
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, hjust = 0)) # rotate x tick labels by 45 degrees
+  
+P4
+
+ggsave("/doctorai/niccoloc/figures/airr_atlas/DMS_supplementary_layers.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+
+
+save(P4, file= "/doctorai/niccoloc/DMS_supplementary_layers.rds")
+
+download_rstudio_file(
+  "/doctorai/niccoloc/DMS_supplementary_layers.rds",
+  "DMS_supplementary_layers.rds"
+)
+
+
+
+```
+
+
+```{r Density sample size LD}
+
+
+# Define the directory containing the files
+directory <- c("Vicinity_results_100k_Density2_sample10000",
+                # "Vicinity_results_100k_Density2_sample100000",
+                "Vicinity_results_100k_Density2_sample2500",
+                "Vicinity_results_100k_Density2_sample5000",
+                "Vicinity_results_100k_Density2_sample25000")
+#paste the /doctorai/niccoloc/ before the directory name
+directory <- paste0("/doctorai/niccoloc/", directory)
+
+
+# Get a list of all files in the directory
+files <- list.files(directory, full.names = TRUE, recursive = TRUE)
+
+dirs_vicinity=list.dirs(directory,full.names = TRUE, recursive = TRUE)[-1]
+
+#filtern dirs for result dirs
+dirs_vicinity = dirs_vicinity[str_detect(dirs_vicinity, 'layer_')]
+
+#find only the files starting with summary_results_ED
+files_summary <- files[str_detect(files, 'summary_results_ED')]
+
+# Function to extract metadata from filename
+extract_metadata <- function(filepath) {
+    # Extract the filename from the full path
+    filename <- basename(filepath) %>% str_remove("summary_results_ED_") %>% str_remove(".csv")
+    #split it
+    parts <- strsplit(filename, "_")[[1]] 
+    len_parts= length(parts)
+    metadata <- c(
+        type = parts[1],
+        model = parts[2],
+        chain = str_c(parts[3:(max(len_parts)-2)], collapse = "_"),
+        layer_number = as.numeric(parts[max(len_parts)])+1
+    )
+    return(metadata)
+}
+
+# Initialize an empty list to store data frames
+data_list <- list()
+summary_data1 = list()
+
+
+
+stopCluster(cl)
+num_cores <- 32
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+clusterEvalQ(cl, .libPaths("/doctorai/niccoloc/libR2"))
+# Loop through each file and read the data
+LD_is_loaded = FALSE
+chosen_LD_density=1
+# for (dir in dirs_vicinity) {
+results_list <- foreach(dir = dirs_vicinity,
+                        .packages = c("data.table", "dplyr", "stringr", "tidyr")
+                        # # .export = c("metadata")
+                        # .errorhandling =  "remove",
+                        # .combine = bind_rows,
+                        # verbose = T
+                        ) %dopar% {
+    
+    files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+    summary_path <- files[str_detect(files, 'summary_results_ED')]
+    sample_size = as.numeric(str_extract(dir, "(?<=sample_)[0-9]*"))
+    # Read the data
+    data <- fread(summary_path)
+    # Function to extract metadata from filename
+
+
+    # Extract metadata from the filename
+    metadata <- extract_metadata(summary_path)
+    #checking which folder is running
+    print(paste0("Running folder: ", dir))
+    # Add metadata to the data frame
+    metadata_tmp <- data %>%
+      
+        mutate(
+        Threshold_original = Threshold,
+        type = ifelse(metadata[1] =="AttentionMat", "Att_mat", metadata[1]),
+        model = metadata[2],
+        chain = metadata[3],
+        layer = metadata[4], 
+        sample_size = sample_size,
+        Threshold =  V1,
+        Vicinty_corr_hb= (Perc_hb * ( 100- NULLPerc_hb)))
+
+    
+    # Append the data frame to the list
+    summary_data1 <- append(summary_data1, list(metadata_tmp))
+    raw_data_path <- files[str_detect(files, 'raw_perc')]
+    raw_data <- fread(raw_data_path)
+    id_link_path <- files[str_detect(files, 'id_index_sample')]
+    id_link_path <- files[str_detect(files, 'index_sequence_id')]
+    # id_link <- fread(id_link_path)
+    # density_path <- files[str_detect(files, 'neighbors_diag.*lin0')]  
+    # density_lin <- fread(files[str_detect(files, 'neighbors_diag_lin0')] ) %>% mutate(method = "lin0")
+    # density_knn <- fread(files[str_detect(files, 'neighbors_diag_NN10_')] ) %>% mutate(method = "NN10")
+    density_LD1 <- fread(files[str_detect(files, 'neighbors_diag.*LD1')] ) %>% mutate(method = "LD1")
+    # density_LD2 <- fread(files[str_detect(files, 'neighbors_diag.*LD2')] ) %>% mutate(method = "LD2")
+    
+
+ 
+    
+    density = density_LD1
+
+    
+    
+    df_sample =  density %>%
+      group_by(method) %>%
+      mutate(
+        inverse_weight = 1 / (Neighbors_Count + 1e-8),
+        sampling_prob = inverse_weight / sum(inverse_weight),
+        ID = row
+      ) %>%  ungroup()
+    
+    sampled_df <- df_sample %>%
+      group_by(method) %>%
+      slice_sample(prop = sample_proportion,
+                   weight_by = sampling_prob,
+                   replace = F) %>%
+      ungroup()
+    
+    p_dens1 =
+      sampled_df %>%
+      left_join(
+        raw_data %>%
+          mutate(
+            Threshold = Threshold - 1,
+            perc_all = ifelse(is.na(Percentage), 0, Percentage),
+        
+          )
+        ,
+        by = 'ID',
+        relationship = "many-to-many"
+      )  %>%
+      filter(Affinity == 'hb') %>%
+      group_by(Affinity, Threshold, method) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+        # AvgNN = mean(NN_na, na.rm = T),
+        
+      ) %>%
+      ungroup() %>%
+      left_join(metadata_tmp %>%
+                  select(Threshold, Threshold_original,
+                         layer, sample_size, type,model,chain, Mean_Num_Points),
+                by = "Threshold")
+  print(p_dens1)
+  p_dens1
+  
+}
+
+
+
+
+Pbox_data_SAMPLE =results_list %>%
+  bind_rows() %>%
+  mutate(layer= as.numeric(layer))  %>%
+  filter(method == "LD1")%>% 
+  group_by(model) %>% 
+    mutate(layer_norm2 = (layer - min(layer)) / (max(layer) - min(layer)) * 100) %>% ungroup()
+
+fwrite("/doctorai/niccoloc/Vicinity_results_SAMPLE.csv", Pbox_data_SAMPLE)
+
+
+
+
+
+
+
+best_median_sample_LD=
+  Pbox_data_SAMPLE %>% 
+    mutate(IQR = Q3 - Q1,
+         score_ratio = median - IQR) %>%
+  group_by(Affinity,method,chain,model,type, layer) %>%
+  summarise(sum_median= mean(median),
+            sum_iqr =mean(IQR)
+            ) %>%
+  group_by(Affinity,method,chain,model,type) %>%  
+  arrange(desc(sum_median), (sum_iqr)) %>%
+  # arrange(desc(M_c)) %>% 
+  # slice_max(median,  n = 1 , with_ties = F) %>%  ungroup()  
+  slice_head(   n =1  ) %>%  ungroup()   
+
+
+
+
+LD_color= 'red'
+
+
+
+x_sample =Pbox_data_SAMPLE   %>% 
+  inner_join(best_median_sample_LD %>% 
+             dplyr::select(method,model,chain,type,layer, Affinity)
+             , 
+             by = c('method','model', 'chain',"type" ,"layer", "Affinity"))    %>%
+          
+  bind_rows(LD_plot_SAMPLE %>%   rename( Mean_Num_Points = AvgNN,) %>%
+  filter ( Mean_Num_Points  <=2000)    ) %>%
+         filter(
+           method  %in% c('LD1','LD-1'),
+                Affinity =='hb'
+                # type !='LD'
+                ) %>% 
+         mutate(layer= as.numeric(layer),
+                IQR= Q3 - Q1)
+
+
+
+p2=ggplot( x_sample %>% 
+          mutate(model = factor(model, levels = c("antiberta2-cssp", "esm2"),
+                                labels = c("AB2", "ESM2"))) ,
+          
+        aes(x = Mean_Num_Points, y = median, color = type, group =  type )) +
+    geom_point(data=. %>% filter (type == "LD"), size =0.4) +                            # Show the median points
+  geom_errorbar(data=. %>% filter (type == "LD"), aes(ymin = Q1, ymax = Q3 ,  alpha=0.45),    # Error bars from Q1 to Q3
+                width = 50, linetype = "solid",
+                alpha=0.8,
+                linewidth = 0.3,color =  LD_color ) +
+    geom_line(data=. %>% filter (type != "LD"),linewidth = 0.75) +                             # Connect the median values
+  # geom_point(size =0.4) +                            # Show the median points
+  geom_errorbar(data=. %>% filter (type != "LD"),
+                aes(ymin = Q1, ymax = Q3 ),    # Error bars from Q1 to Q3
+                 linetype = "dashed",
+                width = 50,
+                alpha=0.8,
+                linewidth = 0.3,  show.legend = FALSE) +
+    ggrepel::geom_text_repel(
+    data = . %>%
+      filter(type =='LD'  ,
+           chain == 'cdr3_only'  ),
+    aes(x = Mean_Num_Points, y = median, label = Threshold),color =LD_color ,min.segment.length = 0, force_pull =-0.2, force=10,nudge_x= 0.2
+
+  ) +
+
+  facet_grid(vars(model),vars(sample_size), scales = "free_x") +
+  ylim(0, 1) +
+  coord_cartesian(xlim= c(-150,1300))+
+  labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
+  theme_bw() +
+  scale_color_manual(values = c("Unpooled" = "green4", 
+                                      "Pooled" = "blue", 
+                                      "Att_mat" = "orange",
+                                      "LD"= LD_color),
+                     name = "Embedding\ncomplexity",
+                     labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled')
+                     ) +
+  # scale_linetype_manual(name = "Embedding \ncomplexity",
+  #                       values =
+  #                         c('Att_mat' = 'dashed',
+  #                           'Unpooled' = 'solid',
+  #                           'Pooled' = 'dotted',
+  #                           'LD'='solid'),
+  #                       labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled') 
+  #                       ) +
+  labs(
+    title = "Distribution of Vicinity scores across different sample sizes",
+    color = 'Model\'s layer\ndepth',
+       y="Vicinity score",
+       x='Average number of nearest neighbours')+
+  theme_bw()+
+  theme(strip.background =element_rect(fill="white"))+
+
+  guides(shape = guide_legend(order = 1),
+         linetype = guide_legend(order = 1,override.aes = list(alpha = 1)))
+  
+
+p2
+
+save(p2, file= "/doctorai/niccoloc/Vicinity_SAMPLE_SIZE2.rds")
+download_rstudio_file(
+  "/doctorai/niccoloc/Vicinity_SAMPLE_SIZE2.rds",
+  "Vicinity_SAMPLE_SIZE2.rds"
+)
+
+
+
+ggsave("/doctorai/niccoloc/figures/airr_atlas/Vicinity_SAMPLE_SIZe_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+
+##### LD
+sample_sizes = c( 2000, 5000, 10000, 25000, 50000, 100000)
+
+LD_res= list()
+
+sample_LD= c(
+  '/doctorai/niccoloc/Vicinity_results_100k_Density2_sample5000_LD_ONLY/Pooled_antiberta2-cssp_cdr3_embeddings_sample_5000_layer_0_LD_ONLY',
+  '/doctorai/niccoloc/Vicinity_results_100k_Density2_sample25000_LD_ONLY/Pooled_antiberta2-cssp_cdr3_embeddings_sample_25000_layer_0_LD_ONLY',
+  '/doctorai/niccoloc/Vicinity_results_100k_Density2_sample2500_LD_ONLY/Pooled_antiberta2-cssp_cdr3_embeddings_sample_2500_layer_0_LD_ONLY',
+  '/doctorai/niccoloc/Vicinity_results_100k_Density2_sample10000_LD_ONLY/Pooled_antiberta2-cssp_cdr3_embeddings_sample_10000_layer_0_LD_ONLY'
+)
+  
+for (dir in sample_LD) {  
+  sample_size_val =  sample_size = as.numeric(str_extract(dir, "(?<=sample_)[0-9]*"))
+
+  dataset_name = basename(dir)
+# for (chosen_LD_density in LD_densities) {  
+ 
+  # dir = '/doctorai/niccoloc/Vicinity_results_sample_test/LD_score_500'
+  
+  files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+  LD_density=  fread(  files[str_detect(files, 'd_whole_LD_stats_.*.csv')] ) 
+  LD_summary = fread(    files[str_detect(files, 'd_mean1_summary.*.csv')] )  
+  
+ LD_summary1=LD_summary %>% 
+  select(-num_nan_HB) %>%
+  tidyr::pivot_longer(cols = matches(".*_(h|l)b$"),  ,
+               names_to = c("Metric", "Affinity"),
+               names_sep = "_",
+               values_to = "Value") %>% 
+  mutate(  
+  type = 'LD',
+  method = paste0("LD-", chosen_LD_density),
+  chain = 'cdr3',
+  sample_size = sample_size_val ,
+  # model = 'ab2',
+  layer = NA) %>% 
+  dplyr::select(V1,Threshold,chain,layer, type,method,  Metric, Affinity, Value, sample_size)  %>%
+  tidyr::pivot_wider(names_from = Metric, values_from = Value) %>% 
+ rename(Vicinity =Perc , Loneliness = NULLPerc, AvgNN = AvgPoints)  %>% 
+    mutate(Vicinty_corr= (Vicinity * ( 1- Loneliness))*100 )%>%
+   dplyr::select(-chain) %>%
+  crossing(model = c('esm2', 'antiberta2-cssp'),
+           chain = c('cdr3_only', 'all_cdrh','heavy_chain'))
+  
+    # 'paired_chain', 'cdr3_pooled', 
+
+
+ 
+LD_sample=LD_density %>% 
+  filter(Threshold <=chosen_LD_density) %>% 
+  # group_by(Threshold) %>%
+  mutate(
+    inverse_weight = 1 / (Neighbors + 1e-8),
+    sampling_prob = inverse_weight / sum(inverse_weight),
+    ID= local_index
+  ) %>%  
+  ungroup()  %>% 
+  slice_sample(prop= sample_proportion, weight_by = sampling_prob, replace = F) 
+
+LD_plot1= LD_density %>%
+  filter(
+    local_index %in% LD_sample$local_index,
+         # Affinity == 'hb'
+
+         ) %>% 
+  mutate(
+         perc_all= ifelse(is.na(Percentage), 0, Percentage  ),
+         NN_na = ifelse(is.na(Percentage), NA,Neighbors)) %>%  
+  # filter(Threshold ==1) %>% 
+  group_by(Affinity, Threshold) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+        # AvgNN = mean(NN_na, na.rm =T),
+      ) %>%
+      ungroup() %>%  
+  left_join(LD_summary1 %>% 
+              select(Threshold,layer,type,model,chain,sample_size,
+                     method,Affinity,AvgNN,Loneliness ,Vicinty_corr),
+            by = c("Threshold", "Affinity"))
+
+  LD_is_loaded = TRUE  
+  LD_res[[as.character(dataset_name)]] = LD_plot1
+# }
+  
+}
+
+LD_plot_SAMPLE = bind_rows(LD_res)
+
+
+
+
+```
+
+
+```{r LD DMS}
+
+chosen_LD_density=1
+sample_proportion =0.25
+LD_densities = c(1 )
+
+# if (LD_is_loaded == FALSE) 
+sample_sizes = c( 2000, 5000, 10000, 25000, 50000, 100000)
+
+LD_res= list()
+
+DMS_LD= c(
+  '/doctorai/niccoloc/test_LD/porebski',
+  '/doctorai/niccoloc/test_LD/brian_hie',
+  '/doctorai/niccoloc/test_LD/covabdab',
+  '/doctorai/niccoloc/test_LD/alphaseq'
+)
+  
+for (DMS in DMS_LD) {  
+  dir = DMS
+  dataset_name = basename(dir)
+# for (chosen_LD_density in LD_densities) {  
+
+  # dir = '/doctorai/niccoloc/Vicinity_results_sample_test/LD_score_500'
+  
+  files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+  LD_density=  fread(  files[str_detect(files, 'd_whole_LD_stats_.*.csv')] ) 
+  LD_summary = fread(    files[str_detect(files, 'd_mean1_summary.*.csv')] )  
+  
+ LD_summary1=LD_summary %>% 
+  select(-num_nan_HB) %>%
+  tidyr::pivot_longer(cols = matches(".*_(h|l)b$"),  ,
+               names_to = c("Metric", "Affinity"),
+               names_sep = "_",
+               values_to = "Value") %>% 
+  mutate(  
+  type = 'LD',
+  method = paste0("LD-", chosen_LD_density),
+  chain = 'cdr3',
+  dataset = dataset_name ,
+  # model = 'ab2',
+  layer = NA) %>% 
+  dplyr::select(V1,Threshold,chain,layer, type,method,  Metric, Affinity, Value, dataset)  %>%
+  tidyr::pivot_wider(names_from = Metric, values_from = Value) %>% 
+ rename(Vicinity =Perc , Loneliness = NULLPerc, AvgNN = AvgPoints)  %>% 
+    mutate(Vicinty_corr= (Vicinity * ( 1- Loneliness))*100 )%>%
+   dplyr::select(-chain) %>%
+  crossing(model = c('esm2', 'antiberta2-cssp'),
+           chain = c('cdr3_only', 'all_cdrh','heavy_chain', 'paired_chain'))
+  
+    # 'paired_chain', 'cdr3_pooled', 
+  if(dataset_name =='covabdab') {LD_summary1 <- mutate(LD_summary1,
+                                                    Affinity = ifelse (Affinity =='hb','covid','background')) }
+ 
+ 
+ 
+LD_sample=LD_density %>% 
+  filter(Threshold <=chosen_LD_density) %>% 
+  # group_by(Threshold) %>%
+  mutate(
+    inverse_weight = 1 / (Neighbors + 1e-8),
+    sampling_prob = inverse_weight / sum(inverse_weight),
+    ID= local_index
+  ) %>%  
+  ungroup()  %>% 
+  slice_sample(prop= sample_proportion, weight_by = sampling_prob, replace = F) 
+
+LD_plot1= LD_density %>%
+  filter(
+    local_index %in% LD_sample$local_index,
+         # Affinity == 'hb'
+
+         ) %>% 
+  mutate(
+         perc_all= ifelse(is.na(Percentage), 0, Percentage  ),
+         NN_na = ifelse(is.na(Percentage), NA,Neighbors)) %>%  
+  # filter(Threshold ==1) %>% 
+  group_by(Affinity, Threshold) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+        # AvgNN = mean(NN_na, na.rm =T),
+      ) %>%
+      ungroup() %>%  
+  left_join(LD_summary1 %>% 
+              select(Threshold,layer,type,model,chain,dataset,
+                     method,Affinity,AvgNN,Loneliness ,Vicinty_corr),
+            by = c("Threshold", "Affinity"))
+
+  LD_is_loaded = TRUE  
+  LD_res[[as.character(dataset_name)]] = LD_plot1
+# }
+  
+}
+
+LD_plot_DMS = bind_rows(LD_res) %>% 
+  filter(  (chain =='heavy_chain' & dataset =="brian_hie") |
+           (chain =='paired_chain' & dataset  %in% c('covabdab','alphaseq')) |
+          ( chain =='cdr3_only' & dataset =='porebski') )
+           
+ 
+
+
+
+```
+
+
+```{r DMS probeksi hie alpha covabdab}
+
+
+
+sample_proportion =1
+sample_proportion =0.25
+
+# Define the directory containing the files
+directory <-c ( "/doctorai/niccoloc/Vicinity_results_BRIANHIE_Density2",
+                "/doctorai/niccoloc/Vicinity_results_POREBSKI_Density2",
+                "/doctorai/niccoloc/Vicinity_results_COVABDAB_Density2",
+                
+                "/doctorai/niccoloc/Vicinity_results_ALPHASEQ_Density2_HB_LB"
+                
+                )
+
+
+
+# directory <- "/doctorai/niccoloc/Vicinity_results_sample_test/LD_score_500"
+
+# Get a list of all files in the directory
+files <- list.files(directory, full.names = TRUE, recursive = TRUE)
+
+dirs_vicinity=list.dirs(directory,full.names = TRUE, recursive = TRUE)[-1]
+
+#filtern dirs
+dirs_vicinity = dirs_vicinity[str_detect(dirs_vicinity, 'layer_')]
+
+
+#find only the files starting with summary_results_ED
+files_summary <- files[str_detect(files, 'summary_results_ED')]
+
+# Function to extract metadata from filename
+extract_metadata <- function(filepath) {
+    # Extract the filename from the full path
+    filename <- basename(filepath) %>% str_remove("summary_results_ED_") %>% str_remove(".csv")
+    #split it
+    parts <- strsplit(filename, "_")[[1]] 
+    len_parts= length(parts)
+    metadata <- c(
+        type = parts[1],
+        model = parts[2],
+        chain = str_c(parts[3:(max(len_parts)-2)], collapse = "_"),
+        layer_number = as.numeric(parts[max(len_parts)])+1
+    )
+    return(metadata)
+}
+
+# Initialize an empty list to store data frames
+data_list <- list()
+summary_data1 = list()
+
+
+
+extract_metadata <- function(filepath) {
+    # Extract the filename from the full path
+    filename <- basename(filepath) %>% str_remove("summary_results_ED_") %>% str_remove(".csv")
+    #split it
+    parts <- strsplit(filename, "_")[[1]] 
+    len_parts= length(parts)
+    metadata <- c(
+        type = parts[1],
+        model = parts[2],
+        chain = str_c(parts[3:(max(len_parts)-2)], collapse = "_"),
+        layer_number = as.numeric(parts[max(len_parts)])+1
+    )
+    return(metadata)
+}
+
+stopCluster(cl)
+num_cores <- 32
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+clusterEvalQ(cl, .libPaths("/doctorai/niccoloc/libR2"))
+
+
+
+# Loop through each file and read the data
+LD_is_loaded = FALSE
+chosen_LD_density=1
+# for (dir in dirs_vicinity) {
+ 
+results_list <- foreach(dir = dirs_vicinity,
+                        .packages = c("data.table", "dplyr", "stringr", "tidyr")
+                        # .export = c("metadata")
+                        # .errorhandling =  "remove"
+                        # verbose = T
+                        ) %dopar% {
+                    # dir ="/doctorai/niccoloc/Vicinity_results_ALPHASEQ_Density2/Pooled_esm2_t33_650M_UR50D_paired_chain_layer_8" 
+    dataset <- case_when(
+      str_detect(dir, "POREBSKI") ~ "porebski",
+      str_detect(dir, "BRIANHIE") ~ "brian_hie",
+      str_detect(dir, "COVABDAB") ~ "covabdab",
+      str_detect(dir, "ALPHASEQ") ~ "alphaseq")
+                          
+    hb_label = 'hb'
+    
+    hb_label = ifelse(dataset =='covabdab','covid','hb')
+                         
+    tryCatch({
+    files <- list.files(dir, full.names = TRUE, recursive = TRUE)
+    summary_path <- files[str_detect(files, 'summary_results_ED')]
+    # Read the data
+    data <- fread(summary_path)
+    # Function to extract metadata from filename
+
+
+    # Extract metadata from the filename
+    metadata <- extract_metadata(summary_path)
+    #checking which folder is running
+    print(paste0("Running folder: ", dir))
+    # Add metadata to the data frame
+    data2 <- data %>%
+      
+        mutate(
+        Threshold_original = Threshold,
+        type = ifelse(metadata[1] =="AttentionMat", "Att_mat", metadata[1]),
+        model = metadata[2],
+        chain = str_to_lower(metadata[3]),
+        layer = metadata[4], 
+        Threshold =  V1,
+        
+        chain = str_remove(chain, "t33_650m_ur50d_"),
+        DMS=dataset
+        )
+    
+    ifelse( dataset != "covabdab" ,
+    data2 <- data2 %>%  
+      mutate ( Vicinty_corr_hb= (Perc_hb * ( 100- NULLPerc_hb))),
+    data2 <- data2 %>%  
+      mutate ( Vicinty_corr_hb= (Perc_covid * ( 100- NULLPerc_covid))))
+    
+    
+
+    
+    # Append the data frame to the list
+    summary_data1 <- append(summary_data1, list(data2))
+    raw_data_path <- files[str_detect(files, 'raw_perc')]
+    raw_data <- fread(raw_data_path)
+    id_link_path <- files[str_detect(files, 'id_index_sample')]
+    id_link_path <- files[str_detect(files, 'index_sequence_id')]
+    # id_link <- fread(id_link_path)
+    density_path <- files[str_detect(files, 'neighbors_diag.*lin0')]  
+    density_lin <- fread(files[str_detect(files, 'neighbors_diag_lin0')] ) %>% mutate(method = "lin0")
+    density_knn <- fread(files[str_detect(files, 'neighbors_diag_NN10_')] ) %>% mutate(method = "NN10")
+    density_LD1 <- fread(files[str_detect(files, 'neighbors_diag.*LD1')] ) %>% mutate(method = "LD1")
+    density_LD2 <- fread(files[str_detect(files, 'neighbors_diag.*LD2')] ) %>% mutate(method = "LD2")
+    
+
+ 
+    
+    density = bind_rows(density_lin, density_knn, density_LD1, density_LD2)  
+    
+    # print( fread(files[str_detect(files, 'neighbors_diag')] [4]) == fread(files[str_detect(files, 'neighbors_diag')] [1])  )
+    
+    # LD_path <- files[str_detect(files, 'LD')]
+    # LD = fread(LD_path)
+    
+    
+    df_sample =  density %>%
+      group_by(method) %>%
+      mutate(
+        inverse_weight = 1 / (Neighbors_Count + 1e-8),
+        sampling_prob = inverse_weight / sum(inverse_weight),
+        ID = row
+      ) %>%  ungroup()
+    
+    sampled_df <- df_sample %>%
+      group_by(method) %>%
+      slice_sample(prop = sample_proportion,
+                   weight_by = sampling_prob,
+                   replace = F) %>%
+      ungroup()
+    
+    p_dens1 =
+      sampled_df %>%
+      left_join(
+        raw_data %>%
+          mutate(
+            Threshold = Threshold - 1,
+            perc_all = ifelse(is.na(Percentage), 0, Percentage),
+        
+          )
+        
+        ,
+        by = 'ID',
+        relationship = "many-to-many"
+      )  %>%
+      filter(Affinity ==  hb_label) %>%
+      group_by(Affinity, Threshold, method) %>%
+      summarise(
+        count = n(),
+        # Compute the whiskers following R's default 1.5*IQR rule:
+        lower_whisker = min(perc_all[perc_all >= quantile(perc_all, 0.25) - 1.5 * IQR(perc_all)]),
+        Q1 = quantile(perc_all, 0.25),
+        median = median(perc_all),
+        Q3 = quantile(perc_all, 0.75),
+        upper_whisker = max(perc_all[perc_all <= quantile(perc_all, 0.75) + 1.5 * IQR(perc_all)]),
+        # AvgNN = mean(NN_na, na.rm = T),
+        
+      ) %>%
+      ungroup() %>%
+      left_join(data2 %>%
+                  select(Threshold, Threshold_original, layer, type,model,chain, Mean_Num_Points, DMS),
+                by = "Threshold")
+    
+    # data_list <- append(data_list, list(p_dens1))
+    
+    
+#   p_dens_vicinity=  
+#   sampled_df %>% 
+# left_join(
+#   raw_data %>%
+#   mutate(Threshold = Threshold -1,
+#          perc_all= ifelse(is.na(Percentage), 0, Percentage  )) ,
+#           by = 'ID',relationship = "many-to-many")  %>% 
+#   filter( Affinity =='hb') %>% 
+#     
+#   left_join(data2 %>% 
+#               select(Threshold,Threshold_original,layer,type,Mean_Num_Points), by = "Threshold")  
+
+  print(p_dens1)
+  p_dens1
+  # return(p_dens1)
+    }, error = function(e) {
+    warning("Error in dir=", dir, ": ", e$message)
+    NULL    # skip this iteration
+  })
+}
+
+
+#LD computation
+# If needed: p_dens_vicinity_list <- lapply(results, `[[`, "p_dens_vicinity")
+names(results_list) <- dirs_vicinity
+
+stopCluster(cl)
+
+Pbox_data_DMS = bind_rows(results_list) %>%  mutate(layer= as.numeric(layer))  %>% 
+  filter(method == "LD1")%>% 
+  group_by(model) %>% 
+    mutate(layer_norm2 = (layer - min(layer)) / (max(layer) - min(layer)) * 100) %>% ungroup()
+
+fwrite("/doctorai/niccoloc/Vicinity_results_DMS.csv", Pbox_data_DMS)
+
+
+summary_data = bind_rows(summary_data1)  
+
+
+
+
+
+best_median_DMS=
+  Pbox_data_DMS %>% 
+    mutate(IQR = Q3 - Q1,
+         score_ratio = median - IQR,
+         median1=median) %>%
+  group_by(DMS,Affinity,method,chain,model,type, layer) %>%
+  summarise(sum_median= mean(median),
+            sum_iqr =mean(IQR),
+            M_c= mean(median/(IQR+0.0001)),
+            median1=median,
+            IQR1 = IQR
+            # M_c= mean(median)/mean(IQR+0.0001)
+            ) %>%
+  group_by(DMS,Affinity,method,chain,model,type) %>%  
+  arrange(desc(sum_median),  ) %>%
+  # arrange(desc(median1), (IQR1)) %>%
+    # arrange(desc(M_c) ) %>%
+  # slice_max(median,  n = 1 , with_ties = F) %>%  ungroup()  
+  slice_head(   n =1  ) %>%  ungroup()   
+
+
+
+
+
+LD_color='red'
+
+DMS_p1 = Pbox_data_DMS %>% 
+  inner_join(best_median_DMS %>% 
+             dplyr::select(DMS,method,model,chain,type,layer, Affinity,M_c), 
+             by = c('DMS','method','model', 'chain',"type" ,"layer", "Affinity")) %>%       
+         bind_rows(LD_plot_DMS %>%
+                     rename( Mean_Num_Points = AvgNN,
+                             DMS=dataset) %>%
+                     filter(Affinity  %in% c( 'hb', 'covid') ,
+                            Mean_Num_Points <= 2000) 
+                   )%>% 
+         mutate(layer= as.numeric(layer),
+                DMS = factor( DMS, levels = c( "porebski","brian_hie","alphaseq", "covabdab")),
+                IQR= Q3 - Q1)
+fwrite(DMS_p1,"/doctorai/niccoloc/Vicinity_results_DMS_p1.csv")
+
+
+p3=
+ggplot( DMS_p1
+       ,
+       # aes(x = Threshold_original, y = median, color = method, group = c(method,layer))) +
+       # aes(x = as.factor(Threshold), y = median, color = layer, group = c(layer))) +
+       aes(x = Mean_Num_Points, y = median, color = type, group =  type   )) +
+  geom_line(data=. %>% filter (type != "LD"),linewidth = 0.75,
+             linetype = "solid") +                             # Connect the median values
+  # geom_point(size =0.4) +                            # Show the median points
+  geom_errorbar(data=. %>% filter (type != "LD"),
+                aes(ymin = Q1, ymax = Q3 , linetype = type),    # Error bars from Q1 to Q3
+                width = 50,
+                alpha=0.8,
+                linewidth = 0.3,  show.legend = FALSE,
+                 linetype = "dashed") +
+    geom_point(data=. %>% filter (type == "LD"), size =0.4, color =  LD_color) +                            # Show the median points
+  geom_errorbar(data=. %>% filter (type == "LD"), aes(ymin = Q1, ymax = Q3 ),    # Error bars from Q1 to Q3
+                width = 50,
+                alpha=0.8,
+                linewidth = 0.3,
+                linetype= "solid") +
+    ggrepel::geom_text_repel(
+    data = . %>%
+      filter(type =='LD',  Affinity !='covid' ),
+    aes(x = Mean_Num_Points, y = median, label = Threshold),color =LD_color ,min.segment.length = 0, force_pull =-0.2, force=10,nudge_x= 0.2 ,max.overlaps=20
+
+  ) +
+  #   geom_line(
+  #   data = summary_data %>% distinct(),
+  #   aes(x = (Threshold_original), y = Perc_hb, group = type),
+  #   color = "blue"
+  # ) +
+  # geom_line(
+  #   data = summary_data %>% distinct(),
+  #   aes(x =  (Threshold_original), y = Vicinty_corr_hb/100, group = type),
+  #   color = "red"
+  # ) +
+  # facet_wrap(vars(type), scales = "free_x") +
+  facet_grid(vars(model),vars(DMS),labeller = as_labeller(c(
+                "antiberta2-cssp" = "AB2", esm2 = "ESM2",
+                brian_hie = "influenzaHA-Shanker",
+                porebski = "HER2-Porebski",
+                alphaseq ="SARS-Cov-2-Engelhart", covabdab ="Cov-AbDab (RBD)")))+                
+
+  ylim(-0.05, 1.05) +
+  xlim(-50,1400)+
+  # labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
+  labs(x = "Threshold", y = "Vicinity score") +
+  theme_bw() +
+  # scale_color_viridis_d(option = "turbo", direction = -1)  
+ # use 10 random colors as palette 
+  # scale_color_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00", "#FFFF33", "#A65628", "#999999", "#F781BF", "#A65628", "#999999"))  +
+  # scale_color_manual(values =  c("#66df4a","#5100d9","#ffb645","#ff00f8","#018941","#5677ff","#ff6f78","#013f91","#710048","#6c006c")) +
+  scale_linetype_manual(name = "Embedding \ncomplexity",
+                        values =
+                          c('Att_mat' = 'dashed',
+                            'Unpooled' = 'solid',
+                            'Pooled' = 'dotted',
+                            'LD'='solid'),
+                        labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled')
+                        ) +
+    scale_color_manual(values = c("Unpooled" = "green4", 
+                                      "Pooled" = "blue", 
+                                      "Att_mat" = "orange",
+                                      "LD"= LD_color),
+                     name = "Embedding\ncomplexity",
+                     labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled')
+                     ) +
+ # use 10 random colors as palette 
+  # scale_color_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00", "#FFFF33", "#A65628", "#999999", "#F781BF", "#A65628", "#999999"))  +
+  # scale_color_manual(values =  c("#66df4a","#5100d9","#ffb645","#ff00f8","#018941","#5677ff","#ff6f78","#013f91","#710048","#6c006c")) +
+
+
+    # scale_color_viridis_c(option = "plasma", direction = -1 , na.value = 'black')+
+  
+  
+  # scale_shape(name = "Embedding \ncomplexity" ,
+  #             labels= c('Attention matrix', 'LD', 'Pooled', 'Unpooled')
+  #             ) +
+ 
+
+  # labs(color = 'Layer depth',
+  labs(
+    # color = 'Density ~ Complexity',
+    # title= 'Vicinity scores distribution across increasingly complexy mutational landscapes',
+    color = 'Model\'s layer\ndepth',
+       # y="Vicinity inversely reweighted by Density",
+       y="Vicinity score",
+       x='Average number of nearest neighbors')+
+  theme_bw()+
+  theme(strip.background =element_rect(fill="white"))+
+
+  guides(shape = guide_legend(order = 1),
+         linetype = guide_legend(order = 1,override.aes = list(alpha = 1)))
+
+p3
+
+  save(p3, file= "/doctorai/niccoloc/Vicinity_DMS.rds")
+download_rstudio_file(
+  "/doctorai/niccoloc/Vicinity_DMS.rds",
+  "Vicinity_DMS.rds"
+)
+
+
+
+ggsave("/doctorai/niccoloc/figures/airr_atlas/Vicinity_DENSITY_DMS_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+ggsave("/doctorai/niccoloc/figures/airr_atlas/Vicinity_DENSITY_DMS_prelim_2.png", last_plot(), width =7.5, height =4.69, units = "in", dpi = 300)
+
+
+ #show all layers
+
+
+ggplot( Pbox_data_DMS %>%      
+         # bind_rows(LD_plot %>% 
+         #             rename( Mean_Num_Points = AvgNN,)) %>%
+         filter(
+           method  %in% c('LD1','LD-1'),
+                Affinity =='hb',
+                # type !='LD'
+                ) %>% 
+         mutate(layer= as.numeric(layer))
+       ,
+       # aes(x = Threshold_original, y = median, color = method, group = c(method,layer))) +
+       # aes(x = as.factor(Threshold), y = median, color = layer, group = c(layer))) +
+       aes(x = Mean_Num_Points, y = median, color = layer, group = interaction(layer,type) ,linetype = type )) +
+  geom_line(linewidth = 0.2) +                             # Connect the median values
+  # geom_point(size =0.4) +                            # Show the median points
+  # geom_errorbar(aes(ymin = Q1, ymax = Q3 , linetype = type),    # Error bars from Q1 to Q3
+  #               width = 50,
+  #               alpha=0.8,
+  #               linewidth = 0.3, ) +
+  #   geom_line(
+  #   data = summary_data %>% distinct(),
+  #   aes(x = (Threshold_original), y = Perc_hb, group = type),
+  #   color = "blue"
+  # ) + 
+  # geom_line(
+  #   data = summary_data %>% distinct(),
+  #   aes(x =  (Threshold_original), y = Vicinty_corr_hb/100, group = type),
+  #   color = "red"
+  # ) +
+  # facet_wrap(vars(type), scales = "free_x") +
+  facet_grid(vars(model),vars(DMS), scales = "free_x") +
+  
+    facet_grid(vars(model), vars(DMS),
+              labeller = as_labeller(c(
+                ab2 = "AntiBERTa2", esm2 = "ESM2",
+                all_cdrh = "All HCDR", paired_chain = "Paired chain",
+                cdr3_pooled = "CDR3 Extracted", cdr3_only = "CDR3 Only",
+                heavy_chain = "Heavy Chain"))
+             ) +
+  
+  ylim(0.0, 1) +
+  xlim(0,1200)+
+  labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
+  theme_bw() +
+  scale_color_viridis_c(option = "plasma", direction = -1)+
+ # use 10 random colors as palette 
+  # scale_color_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00", "#FFFF33", "#A65628", "#999999", "#F781BF", "#A65628", "#999999"))  +
+  # scale_color_manual(values =  c("#66df4a","#5100d9","#ffb645","#ff00f8","#018941","#5677ff","#ff6f78","#013f91","#710048","#6c006c")) +
+  
+  
+  
+  scale_linetype_manual(name = "Embedding \ncomplexity",
+                        values =
+                          c(
+                            'Unpooled' = 'solid',
+                            'Att_mat' = 'dashed',
+                            'Pooled' = 'dotted',
+                            'LD'='solid'))
+  
+
+
+
+
+```
+
