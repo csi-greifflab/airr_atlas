@@ -1,13 +1,14 @@
 #!/bin/bash
+# NOTE: Paths refer to HPC server. Modify for your environment.
 
-source /home/marinafr/.bashrc
-conda activate airr_atlas
+#source /home/marinafr/.bashrc
+#conda activate airr_atlas
 
-workers=40
+workers=32
 
 script="/doctorai/marinafr/2023/airr_atlas/analysis/scripts/build_tsne.py"
 
-embedding=("esm2_tsne" "prott5_tsne")
+embedding=("esm2/ireceptor/random/tsne" "antiberta2/ireceptor/random/tsne" "ohe/ireceptor/random/tsne")
 
 # Nested loops to run the script with different combinations of arguments
 for e in "${embedding[@]}"; do

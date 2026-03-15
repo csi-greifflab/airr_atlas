@@ -1,0 +1,3 @@
+[submodule "libraries/immune2vec_model"]
+	path = libraries/immune2vec_model
+	url = https://bitbucket.org/yaarilab/immune2vec_model.git

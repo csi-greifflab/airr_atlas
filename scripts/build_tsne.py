@@ -22,12 +22,13 @@ file_list = os.listdir(in_file_path)
 
 # Iterate through the files
 for filename in file_list:
-    if 'pt' in filename or 'pkl' in filename or 'npy' in filename:
+    if ('pt' in filename or 'pkl' in filename or 'npy' in filename) and (not 'UMAP' in filename):
+        print('found a file')
         output_file = in_file_path + 'TSNE_' + filename.split('.')[0]
 
         # Load embedding file
         if "pt" in filename:
-            data = torch.load(in_file_path+filename).numpy()
+            data = torch.load(in_file_path+filename) #.numpy()
         elif "pkl" in filename:
             data = pd.read_pickle(in_file_path+filename).values
         elif "npy" in filename:
@@ -43,3 +44,6 @@ for filename in file_list:
         # Save the t-SNE result to a pickle file
         tsne_df.to_pickle(f'{output_file}.pkl')
         print(f"Saved {output_file}.pkl with {tsne_df.shape[0]} sequences")
+
+    else:
+        print('file not found')
