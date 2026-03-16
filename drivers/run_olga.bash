@@ -1,4 +1,5 @@
 #!/bin/bash
+# NOTE: Paths refer to HPC server. Modify for your environment.
 
 input_file="/doctorai/marinafr/2023/airr_atlas/analysis/data/all_data/all_data.fa"
 output_dir="/doctorai/marinafr/2023/airr_atlas/analysis/output/olga/all_data"

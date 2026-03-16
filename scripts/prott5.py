@@ -9,18 +9,22 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description="Input path")
-parser.add_argument("chain", type=str, help="Chain type (H, L, PAIRED)")
-parser.add_argument("input", type=str, help="Input sequence (FULL or CDR3)")
+#parser.add_argument("chain", type=str, help="Chain type (H, L, PAIRED)")
+#parser.add_argument("input", type=str, help="Input sequence (FULL or CDR3)")
+parser.add_argument("fasta_path", type=str, help="Fasta path + filename.fa")
+parser.add_argument("output_path", type=str, help="Output path + filename.pt")
 args = parser.parse_args()
 
-base_dir = "/doctorai/marinafr/2023/airr_atlas/analysis/data/"
-out_dir = "/doctorai/marinafr/2023/airr_atlas/analysis/output/prott5/"
+#base_dir = "/doctorai/marinafr/2023/airr_atlas/analysis/data/"
+#out_dir = "/doctorai/marinafr/2023/airr_atlas/analysis/output/prott5/"
 
-fasta_file = base_dir + args.chain + "_" + args.input + ".fa"
+#fasta_file = base_dir + args.chain + "_" + args.input + ".fa"
+fasta_file = args.fasta_path
 
-out_id = args.chain + "_" + args.input
-out_corpus_fname = out_dir + out_id
-output_file = out_corpus_fname + '.pkl'
+#out_id = args.chain + "_" + args.input
+#out_corpus_fname = out_dir + out_id
+#output_file = out_corpus_fname + '.pkl'
+output_file = args.output_path
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Device: {device}")

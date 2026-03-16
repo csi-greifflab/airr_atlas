@@ -3,6 +3,17 @@ data/*
 *.csv
 *test.fa*
 
+# Output images
+*.png
+
+# Large binary files
+*.pt
+*.npy
+*.pkl
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
 # Other tools
 SaProt
 models

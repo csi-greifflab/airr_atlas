@@ -25,15 +25,10 @@ Dependencies:
     - torch.utils.data (PyTorch)
 """
 
-import sys
-
-sys.path.append(
-    "/doctorai/userdata/airr_atlas/"
-)  # Add the project directory to the Python path
 import os
 import torch
 from esm import FastaBatchedDataset, pretrained
-from scripts.embedding_utils import (
+from embedding_utils import (
     parse_arguments,
     fasta_to_dict,
     load_cdr3,
@@ -216,8 +211,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-# sys.argv = ['esm2_cdr3.py',
-#            '--fasta_path','/doctorai/userdata/airr_atlas/data/sequences/test.fa',
-#            '--cdr3_path', '/doctorai/userdata/airr_atlas/data/sequences/trastuzumab/tz_cdr3.csv',
-#            '--output_path','/doctorai/userdata/airr_atlas/data/embeddings/test.pt',
-#            '--layers', "1"]
