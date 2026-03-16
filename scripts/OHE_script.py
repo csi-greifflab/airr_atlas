@@ -143,22 +143,22 @@ def main():
 
 
 # Test function to quickly validate the script
-#def test():
-#    test_args = [
-#        '--input_path', '/doctorai/niccoloc/pancancer_b_cells_metadata_filtered.csv',
-#        '--folder_path', '/doctorai/niccoloc/OHE',
-#        '--output_path', '/doctorai/niccoloc/test1',
-#        '--labels', 'cancer_loc',
-#        '--junction_aa', 'sequence_aa',
-#        '--yaml_template', '/doctorai/niccoloc/res1/full_ohe_cancer.yaml'
-#    ]
-#    import sys
-#
-#    sys.argv = ['script_name'] + test_args
-#    main()
+def test():
+    test_args = [
+        '--input_path', '/doctorai/niccoloc/pancancer_b_cells_metadata_filtered.csv',
+        '--folder_path', '/doctorai/niccoloc/OHE',
+        '--output_path', '/doctorai/niccoloc/test1',
+        '--labels', 'cancer_loc',
+        '--junction_aa', 'sequence_aa',
+        '--yaml_template', '/doctorai/niccoloc/res1/full_ohe_cancer.yaml'
+    ]
+    import sys
+
+    sys.argv = ['script_name'] + test_args
+    main()
 
 
-#test()
+test()
 
 if __name__ == "__main__":
     main()

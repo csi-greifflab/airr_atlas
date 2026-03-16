@@ -1,21 +1,14 @@
 #!/bin/bash
-# NOTE: Paths refer to HPC server. Modify for your environment.
 
-#source /home/marinafr/.bashrc
-#conda activate airr_atlas
+source /home/marinafr/.bashrc
+conda activate airr_atlas
 
 workers=32
 
 script="/doctorai/marinafr/2023/airr_atlas/analysis/scripts/esm2.py"
 
-input=(
-"/doctorai/marinafr/2023/airr_atlas/analysis/data/ireceptor/random/random_aa.fa" "/doctorai/marinafr/2023/airr_atlas/analysis/data/ireceptor/random/random_shuffled.fa" "/doctorai/marinafr/2023/airr_atlas/analysis/data/ireceptor/random/random.fa"
-)
-
-output=(
-"/doctorai/marinafr/2023/airr_atlas/analysis/output/esm2/ireceptor/random/random_aa.pt" "/doctorai/marinafr/2023/airr_atlas/analysis/output/esm2/ireceptor/random/random_shuffled.pt" "/doctorai/marinafr/2023/airr_atlas/analysis/output/esm2/ireceptor/random/random.pt"
-)
-
+input=("/doctorai/marinafr/2023/airr_atlas/analysis/data/all_data/all_data.fa")
+output=("/doctorai/marinafr/2023/airr_atlas/analysis/output/esm2/all_data/all_data.pt")
 
 for ((idx=0; idx<${#input[@]}; idx++)); do
     i=${input[$idx]}

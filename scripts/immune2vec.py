@@ -17,7 +17,8 @@ import pickle
 import sys
 import os
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'libraries'))
+#sys.path.append("/gpfs/ysm/project/mw957/repos/archive/immune2vec/embedding")
+sys.path.append("/doctorai/marinafr/2023/airr_atlas/wang_paper/libraries/")
 from immune2vec_model.embedding import sequence_modeling
 
 import pandas as pd

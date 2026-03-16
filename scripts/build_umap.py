@@ -27,14 +27,14 @@ for filename in file_list:
 
         # Load embedding file
         if "pt" in filename:
-            data = torch.load(in_file_path+filename) #.numpy()
+            data = torch.load(in_file_path+filename).numpy()
         elif "pkl" in filename:
             data = pd.read_pickle(in_file_path+filename).values
         elif "npy" in filename:
             data = np.load(in_file_path+filename)
         print(f"Read {in_file_path+filename} with {data.shape[0]} sequences")
 
-        umap_df = pd.DataFrame(UMAP(transform_seed=42, unique=True).fit_transform(data))
+        umap_df = pd.DataFrame(UMAP(transform_seed=42).fit_transform(data))
 
         umap_df.to_pickle(f'{output_file}.pkl')
         print(f"Saved {output_file}.pkl with {umap_df.shape[0]} sequences")
