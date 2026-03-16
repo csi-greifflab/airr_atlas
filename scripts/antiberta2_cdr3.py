@@ -25,12 +25,17 @@ Dependencies:
     - torch.utils.data (PyTorch)
 """
 
+import sys
+
+sys.path.append(
+    "/doctorai/userdata/airr_atlas/"
+)  # Add the project directory to the Python path
 import os
 import torch
 import time
 from transformers import RoFormerTokenizer, RoFormerModel
 from torch.utils.data import DataLoader, TensorDataset
-from embedding_utils import (
+from scripts.embedding_utils import (
     parse_arguments,
     fasta_to_dict,
     load_cdr3,

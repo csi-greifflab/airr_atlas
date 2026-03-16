@@ -1,5 +1,4 @@
 #!/bin/bash
-# NOTE: Paths refer to HPC server. Modify for your environment.
 
 source /home/marinafr/.bashrc
 conda activate airr_atlas
