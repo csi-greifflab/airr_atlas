@@ -1,7 +1,7 @@
 # Datasets
 data/*
 *test.fa*
-*.rds
+
 
 # Other tools
 SaProt
