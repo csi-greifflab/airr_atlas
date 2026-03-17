@@ -1,0 +1,10 @@
+The paired chain data (from AlphaSeq and Trastuzumab experiments) were too large to include in this GitHub repository in their entirety. 
+For this reason, we provide a subset of the sequences (1,000 rows) for testing purposes.
+
+The paired chains were linked together in the original analysis by concatenating the Heavy and Light chain sequences (VH + VL). 
+In the AlphaSeq dataset, the 'Sequence' column contains these concatenated sequences.
+
+Differences between AntiBERTa2 (AB2) and ESM2 embeddings:
+- AB2 is an antibody-specific language model, whereas ESM2 is a general protein language model.
+- In our analysis, AB2 generally showed higher vicinity scores for antigen-specific clusters compared to ESM2, suggesting a better capture of antibody-specific structural/functional features.
+- ESM2 embeddings were typically 1280-dimensional, while AB2 embeddings were 1024-dimensional (depending on the specific version and layer used).
