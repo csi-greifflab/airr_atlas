@@ -92,11 +92,7 @@ for sample_size in "${sample_sizes[@]}"; do
           # Skip if model is esm2 and layer is smaller than 18
 
 
-          # if layer is == 4 and model is not antiberta2 skip , else if model is antiberta2 and layer is 4  and embeddings are not embeddings_unpooled skip
-          if [[ "$model" != "antiberta2-cssp" && $layer -eq 4 ]]; then continue; fi
-          if [[ "$model" == "antiberta2-cssp" && $layer -eq 4 && "$complexity" != "embeddings_unpooled" ]]; then continue; fi
 
- 
 
           # Get the paths
           get_paths "$model" "$chain" "$layer"

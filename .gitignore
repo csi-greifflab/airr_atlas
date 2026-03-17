@@ -1,6 +1,5 @@
 # Datasets
 data/*
-*.csv
 *test.fa*
 *.rds
 

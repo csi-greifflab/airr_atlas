@@ -96,8 +96,7 @@ for sample_size in "${sample_sizes[@]}"; do
         for chain in "${chains[@]}"; do
           # Skip if model is ab2 and layer is greater than or equal to 17
           if [[ "$model" == "ab2" && $layer -ge 16 ]]; then continue; fi
-          # Skip if model is esm2 and layer is smaller than 18
-          # if ! [[ "$model" == "antiberta2-cssp" && "$complexity" == "embeddings_unpooled" && $layer -ge 9 && "$sample_size" == "0" ]]; then continue; fi
+
 
 
           # Get the paths
