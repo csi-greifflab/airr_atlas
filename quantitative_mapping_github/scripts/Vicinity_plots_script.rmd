@@ -64,7 +64,7 @@ download_rstudio_file <- function(filepath, download_name = NULL, host = "http:/
 sample_proportion =0.25
 
 # Define the directory containing the files (relative to script location)
-directory <- c("../data/results/vicinity_raw_extracted") # This would be where raw results are unzipped if available
+directory <- c("../data/results/vicinity_raw_extracted") # This would be where the outputs of the Vicinity_pipeline_final.py script are stored
 
 
 
@@ -1323,7 +1323,6 @@ sample_proportion =0.25
 directory <-c ( "../Vicinity_results_BRIANHIE_Density2",
                 "../Vicinity_results_POREBSKI_Density2",
                 "../Vicinity_results_COVABDAB_Density2",
-                
                 "../Vicinity_results_ALPHASEQ_Density2_HB_LB"
                 
                 )
@@ -1673,25 +1672,8 @@ ggplot( DMS_p1
                      name = "Embedding\ncomplexity",
                      labels = c('Attention\nmatrix', 'LD', 'Pooled', 'Unpooled')
                      ) +
- # use 10 random colors as palette 
-  # scale_color_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00", "#FFFF33", "#A65628", "#999999", "#F781BF", "#A65628", "#999999"))  +
-  # scale_color_manual(values =  c("#66df4a","#5100d9","#ffb645","#ff00f8","#018941","#5677ff","#ff6f78","#013f91","#710048","#6c006c")) +
-
-
-    # scale_color_viridis_c(option = "plasma", direction = -1 , na.value = 'black')+
-  
-  
-  # scale_shape(name = "Embedding \ncomplexity" ,
-  #             labels= c('Attention matrix', 'LD', 'Pooled', 'Unpooled')
-  #             ) +
- 
-
-  # labs(color = 'Layer depth',
   labs(
-    # color = 'Density ~ Complexity',
-    # title= 'Vicinity scores distribution across increasingly complexy mutational landscapes',
     color = 'Model\'s layer\ndepth',
-       # y="Vicinity inversely reweighted by Density",
        y="Vicinity score",
        x='Average number of nearest neighbors')+
   theme_bw()+
@@ -1712,70 +1694,6 @@ download_rstudio_file(
 
 ggsave("../figures/airr_atlas/Vicinity_DENSITY_DMS_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
 ggsave("../figures/airr_atlas/Vicinity_DENSITY_DMS_prelim_2.png", last_plot(), width =7.5, height =4.69, units = "in", dpi = 300)
-
-
- #show all layers
-
-
-ggplot( Pbox_data_DMS %>%      
-         # bind_rows(LD_plot %>% 
-         #             rename( Mean_Num_Points = AvgNN,)) %>%
-         filter(
-           method  %in% c('LD1','LD-1'),
-                Affinity =='hb',
-                # type !='LD'
-                ) %>% 
-         mutate(layer= as.numeric(layer))
-       ,
-       # aes(x = Threshold_original, y = median, color = method, group = c(method,layer))) +
-       # aes(x = as.factor(Threshold), y = median, color = layer, group = c(layer))) +
-       aes(x = Mean_Num_Points, y = median, color = layer, group = interaction(layer,type) ,linetype = type )) +
-  geom_line(linewidth = 0.2) +                             # Connect the median values
-  # geom_point(size =0.4) +                            # Show the median points
-  # geom_errorbar(aes(ymin = Q1, ymax = Q3 , linetype = type),    # Error bars from Q1 to Q3
-  #               width = 50,
-  #               alpha=0.8,
-  #               linewidth = 0.3, ) +
-  #   geom_line(
-  #   data = summary_data %>% distinct(),
-  #   aes(x = (Threshold_original), y = Perc_hb, group = type),
-  #   color = "blue"
-  # ) + 
-  # geom_line(
-  #   data = summary_data %>% distinct(),
-  #   aes(x =  (Threshold_original), y = Vicinty_corr_hb/100, group = type),
-  #   color = "red"
-  # ) +
-  # facet_wrap(vars(type), scales = "free_x") +
-  facet_grid(vars(model),vars(DMS), scales = "free_x") +
-  
-    facet_grid(vars(model), vars(DMS),
-              labeller = as_labeller(c(
-                ab2 = "AntiBERTa2", esm2 = "ESM2",
-                all_cdrh = "All HCDR", paired_chain = "Paired chain",
-                cdr3_pooled = "CDR3 Extracted", cdr3_only = "CDR3 Only",
-                heavy_chain = "Heavy Chain"))
-             ) +
-  
-  ylim(0.0, 1) +
-  xlim(0,1200)+
-  labs(x = "Threshold", y = "Vicinity inversely reweighted by Density") +
-  theme_bw() +
-  scale_color_viridis_c(option = "plasma", direction = -1)+
- # use 10 random colors as palette 
-  # scale_color_manual(values = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00", "#FFFF33", "#A65628", "#999999", "#F781BF", "#A65628", "#999999"))  +
-  # scale_color_manual(values =  c("#66df4a","#5100d9","#ffb645","#ff00f8","#018941","#5677ff","#ff6f78","#013f91","#710048","#6c006c")) +
-  
-  
-  
-  scale_linetype_manual(name = "Embedding \ncomplexity",
-                        values =
-                          c(
-                            'Unpooled' = 'solid',
-                            'Att_mat' = 'dashed',
-                            'Pooled' = 'dotted',
-                            'LD'='solid'))
-  
 
 
 
