@@ -1,63 +1,56 @@
 # AIRR Atlas: Quantitative Mapping of Antibody Embeddings
 
-This repository contains the code and summarized data for the quantitative mapping of antibody embeddings, as presented in the manuscript "AIRR Atlas".
+This part of the repository contains the code for the analysis shown in figure 3 and 4, and the corresponding supplementary figures.
 
-## Repository Structure
+## Scripts
+ 
+### Embedding Extraction
+ 
+| Script | Description |
+|--------|-------------|
+| `run_EMBEDDAIR.sh` | Main driver for embedding extraction using `pepe-cli`. All embeddings used in the analysis were generated with this script. |
+| `PREPROCESSING.rmd` | R Markdown for preprocessing steps of some datasets. |
+ 
+---
 
-- `scripts/`: Implementation of the Vicinity analysis (Python) and plotting scripts (R).
-  - `run_EMBEDDAIR.sh`: Main driver for embedding extraction using `pepe-cli`.
-  - `Vicinity_pipeline_final.py`: Core Vicinity analysis engine.
-  - `Vicinity_plots_script.rmd`: R Markdown for generating Vicinity density plots.
-  - `tsne_density_plot_script.Rmd`: R Markdown for t-SNE and density difference plots.
+### Wasserstein Distance Analysis (Figure 3A and Supplementary)
+ 
+| Script | Description |
+|--------|-------------|
+| `get_W2.py` | Computes the Wasserstein-2 (W2) distance matrix for each dataset. |
+| `LD_pairwise_AG.py` | Computes the pairwise Levenshtein distance matrix for antigen-specific datasets (used in supplementary figures). |
+| `W2_antigen-specific.py` | Computes the Wasserstein-2 distance matrix for the antigen-specific datasets. Takes mean-pooled embeddings and their metadata as input, and returns the W2 distance matrix and the corresponding plots (ESM2 and Ab2 separately). |
+
+---
+
+### t-SNE Analysis (Figure 3B-3C and Supplementary)
+ 
+| Script | Description |
+|--------|-------------|
+| `fit_transform_TSNE_fig3.py` | Fits a t-SNE model on the mean-pooled embeddings of the iReceptor dataset and projects the embeddings into t-SNE space. The trained model is then used to project the mean-pooled embeddings of the other datasets. |
+| `tsne_density_plot_script.Rmd` | R Markdown for t-SNE and density difference plots (Figure 3 and supplementary figures). Takes the t-SNE-reduced embeddings of iReceptor and the other datasets as input, performs the density difference analysis, and generates the manuscript figures. |
+ 
+---
+
+### Vicinity Analysis (Figures 4 and Supplementary)
+ 
+| Script | Description |
+|--------|-------------|
+| `PREPROCESSING.rmd` | R Markdown for preprocessing steps prior to the Vicinity analysis. |
+| `Vicinity_pipeline_final.py` | Core Vicinity analysis pipeline. Takes embeddings and metadata as input and produces a results folder with the Vicinity analysis output for each dataset and model configuration. |
+| `Vicinity_analysis_class_final.py` | Class-based implementation supporting the Vicinity analysis pipeline. |
+| `Vicinity_plots_script.rmd` | R Markdown for generating Vicinity plots (Figure 4 and supplementary figures). Uses the result folders produced by `Vicinity_pipeline_final.py` to reproduce the plots shown in the manuscript. |
+| `get_LD_matrix.py` | Computes the Levenshtein (LD) distance matrix for each dataset. Required as input for the Vicinity analysis pipeline, used as the sequence-level comparator against the embeddings. |
+
+
+### Other folders
+
 - `drivers/`: Bash scripts to run the Vicinity analysis across different datasets and model configurations.
 - `data/`: 
   - `sequences/`: FASTA files and sampled sequences.
   - `metadata/`: Metadata for the various antibody datasets (zipped).
-  - `results/`: Summarized results used to reproduce the figures in the manuscript.
+  - `results/`: Summarized results used as input to reproduce the figures in the manuscript.
 - `figures/`: Output directory for generated figures.
 
-## Getting Started
 
-### Prerequisites
 
-- Python 3.8+
-- R 4.0+
-- Conda (recommended)
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/csi-greifflab/airr-atlas.git
-   cd airr-atlas/quantitative_mapping
-   ```
-
-2. Create and activate the conda environment:
-   ```bash
-   conda activate /doctorai/niccoloc/envs/embeddair_nick
-   # Note: For external users, please install pepe-cli: https://github.com/csi-greifflab/pepe-cli
-   ```
-
-### Running the Analysis
-
-To extract embeddings:
-```bash
-./scripts/run_EMBEDDAIR.sh
-```
-
-To run the Vicinity analysis:
-```bash
-cd drivers
-./run_CHINERY.sh
-```
-
-To generate figures:
-Use RStudio to open and run the `.Rmd` files in the `scripts/` directory. The scripts are configured to use the summarized data in `data/results/` to reproduce the manuscript figures even without the full original datasets.
-
-## Data Note
-
-Due to size limitations, some large datasets (e.g., full iReceptor, paired chains) are provided as samples or summarized results. For access to the full raw datasets, please refer to the links provided in the manuscript.
-
-## License
-
-[Insert License here, e.g., MIT]
