@@ -2,6 +2,7 @@
 data/*
 *.csv
 *test.fa*
+tmp/
 
 # Other tools
 SaProt
