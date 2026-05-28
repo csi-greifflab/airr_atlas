@@ -1,0 +1,17 @@
+quantitative_mapping_github/figures/FIG_3A_w2_distance_matrix_ab2-4.png --FIG_3A
+quantitative_mapping_github/figures/FIG_3A_w2_distance_matrix_esm2-4.png --FIG_3A
+quantitative_mapping_github/figures/FIG_3B_Ag_density.png   ---FIG_3B
+quantitative_mapping_github/figures/FIG_3C_New_Density_DIFF.png --FIG_3C
+
+quantitative_mapping_github/figures/FIG4A_vicinity_graphical_abstract_A.png --FIG4A
+quantitative_mapping_github/figures/FIG4B_vicinity_graphical_abstract_B.png --FIG4B
+quantitative_mapping_github/figures/FIG_4C_Vicinity_DENSITY_prelim.png --FIG_4C
+quantitative_mapping_github/figures/FIG_4D_Vicinity_SAMPLE_SIZe_v2.png --FIG_4D
+quantitative_mapping_github/figures/FIG_4E_Vicinity_DENSITY_DMS_v2.png --FIG_4E
+
+quantitative_mapping_github/figures/FIG_S6_pairwise_levenshtein_distance_distributions_LEV_NORM2-3.png --FIG_S6
+quantitative_mapping_github/figures/FIG_S7_Supplementary_DENSITY_TSNE.png --FIG_S7
+quantitative_mapping_github/figures/FIG_S8_TZ_supplementary_layers.png --FIG_S8
+quantitative_mapping_github/figures/FIG_S10_DMS_supplementary_layers.png --FIG_S10
+quantitative_mapping_github/figures/FIG_S14_cr9114.png --FIG_S14
+quantitative_mapping_github/figures/FIG_S15_alphaseq_scatter_hb_selection.png ---FIG_S15
