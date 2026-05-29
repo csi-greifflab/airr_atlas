@@ -4,23 +4,23 @@
 ## Code used:
 ### 1/ Calculation of the embeddings:
 **AB2:**
-scripts/antiberta2_cdr3.py
-drivers/run_antiberta2_cdr3.bash
+figures/main/fig_2_w2_distance_matrices/scripts/antiberta2_cdr3.py
+figures/main/fig_2_w2_distance_matrices/drivers/run_antiberta2_cdr3.bash
 
 **ESM2:**
-scripts/esm2.py
-drivers/run_esm2.bash
+figures/main/fig_2_w2_distance_matrices/scripts/esm2.py
+figures/main/fig_2_w2_distance_matrices/drivers/run_esm2.bash
 
 **OHE:**
-scripts/OHE_script.py
-drivers/run_ohe.bash
+figures/main/fig_2_w2_distance_matrices/scripts/OHE_script.py
+figures/main/fig_2_w2_distance_matrices/drivers/run_ohe.bash
 
 ### 2/ tSNE dimentionality reduction:
-scripts/build_tsne.py
-run_tsne.bash
+figures/main/fig_2_w2_distance_matrices/scripts/build_tsne.py
+figures/main/fig_2_w2_distance_matrices/run_tsne.bash
 
 ### 3/ Visualization:
-notebooks/tsne.ipynb
+figures/main/fig_2_w2_distance_matrices/notebooks/tsne.ipynb
 
 ---
 
@@ -31,7 +31,7 @@ notebooks/tsne.ipynb
 Same as above
 
 ### 2/ Completeness and w2 calculation:
-notebooks/completeness.ipynb
+figures/main/fig_2_w2_distance_matrices/notebooks/fig_2b_completeness.ipynb
 
 ---
 
@@ -39,13 +39,13 @@ notebooks/completeness.ipynb
 ### Evaluating the quality of clustering replicates (18'000'000 sequences in total) of different donors based on different pipeline modifications
 
 ### 1/ Dataset construction:
-notebooks/Briney_dataset_construction.ipynb
+figures/main/fig_2_w2_distance_matrices/notebooks/Briney_dataset_construction.ipynb
 
 ### 2/ W2 calculation:
-scripts/Briney_experiment_W2_calculation.py
+figures/main/fig_2_w2_distance_matrices/scripts/Briney_experiment_W2_calculation.py
 
 ### 3/ Comparison:
-notebooks/Fig_2D.ipynb
+figures/main/fig_2_w2_distance_matrices/notebooks/fig_2_comparison.ipynb
 
 ---
 
@@ -81,7 +81,7 @@ Same as above
 Same as above
 
 ### 2/ Completeness and w2 calculation:
-notebooks/completeness_tz.ipynb
+figures/supplementary/fig_s3/notebooks/fig_s3_completeness_tz.ipynb
 
 ---
 
@@ -92,14 +92,14 @@ notebooks/completeness_tz.ipynb
 Same as above
 
 ### 2/ Pairwise W2 calculations and plots:
-notebooks/w2_random_data.ipynb
+figures/supplementary/fig_s4/notebooks/w2_random_data.ipynb
 
 ---
 
 # Supplementary figure 11:
 ### Evaluating the performance of different pipeline modifications in revealing donor-specific repertoire structure
 
-notebooks/Data_overlap.ipynb
+figures/supplementary/fig_s11/notebooks/fig_s11_data_overlap.ipynb
 
 ---
 
@@ -110,7 +110,7 @@ notebooks/Data_overlap.ipynb
 Same as above
 
 ### 2/ Visualization:
-notebooks/length_vdj_bias.ipynb
+figures/supplementary/fig_s12/notebooks/fig_s12_length_vdj_bias.ipynb
 
 ---
 
