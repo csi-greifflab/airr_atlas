@@ -211,10 +211,8 @@ table(umap_df$binding_label,umap_df$model)
 
 library("scico", lib.loc= "/doctorai/niccoloc/libR2")
 library(tidyr)
+
 # library(MASS)
-
-fwrite(umap_df, "/doctorai/niccoloc/umap_df_density_diff_x_giulio.csv")
-
 # Function to compute background density
 compute_background_density <- function(data, x_var, y_var, label_var, target_label, n = 100) {
   # Filter data for the target label (e.g., "ireceptor")
@@ -542,7 +540,7 @@ print(plot_list[1])
 print(final_plot)
 
 # Optionally save the combined plot
-ggsave("../figures/FIG_3C_New_Density_DIFF.png", plot = final_plot,width =10, height =6.25, units = "in", dpi = 300)
+ggsave("../output/fig_3c_new_density_diff.png", plot = final_plot,width =10, height =6.25, units = "in", dpi = 300)
   
 
 

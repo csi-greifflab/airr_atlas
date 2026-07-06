@@ -251,7 +251,7 @@ geom_rect(
 
 
 
-ggsave("../figures/FIG_S15_alphaseq_scatter_hb_selection.png", width = 10, height = 7, units = "in", dpi = 300)
+ggsave("../../supplementary/fig_s15/output/fig_s15_alphaseq_scatter_hb_selection.png", width = 10, height = 7, units = "in", dpi = 300)
 ```
 
 
@@ -402,7 +402,7 @@ x1_seq_full %>%
   theme_bw()
 
 ggsave(
-  filename = "../figures/FIG_S14_cr9114.png",
+  filename = "../../supplementary/fig_s14/output/fig_s14_cr9114.png",
   plot = last_plot(),
   width = 10,
   height = 7,

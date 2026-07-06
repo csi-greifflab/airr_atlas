@@ -61,7 +61,7 @@ download_rstudio_file <- function(filepath, download_name = NULL, host = "http:/
 
 
 #density sampling proportion
-sample_proportion =0.25
+sample_proportion = 0.25
 
 # Define the directory containing the files (relative to script location)
 directory <- c("../data/results/vicinity_raw_extracted") # This would be where the outputs of the Vicinity_pipeline_final.py script are stored
@@ -467,7 +467,7 @@ ggplot(
 p4_1
 LD_color= 'red'
 
-ggsave("../figures/FIG_4C_Vicinity_DENSITY_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+ggsave("../output/fig_4c_vicinity_density_prelim.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
 
 save(p4_1, file= "../data/results/Vicinity_main_fig.rds")
 
@@ -669,7 +669,7 @@ P3=p1 +p2 +plot_layout(guides = "collect")  &            # collect all guides in
         axis.text.x = element_text(angle = 90, vjust = 0)) # rotate x tick labels by 45 degrees
 P3
 
-ggsave("../figures/FIG_S8_TZ_supplementary_layers.png", last_plot(),  width =10, height =6.25, units = "in", dpi = 300)
+ggsave("../../supplementary/fig_s8/output/fig_s8_tz_supplementary_layers.png", last_plot(),  width =10, height =6.25, units = "in", dpi = 300)
 save(P3, file= "../data/results/TZ_supplementary_layers.rds")
 
 
@@ -799,7 +799,7 @@ P4=p1 +p2 +plot_layout(guides = "collect")  &            # collect all guides in
   
 P4
 
-ggsave("../figures/FIG_S10_DMS_supplementary_layers.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
+ggsave("../../supplementary/fig_s10/output/fig_s10_dms_supplementary_layers.png", last_plot(), width =10, height =6.25, units = "in", dpi = 300)
 save(P4, file= "../data/results/DMS_supplementary_layers.rds")
 
 download_rstudio_file(
@@ -1700,7 +1700,7 @@ ggsave("../figures/airr_atlas/Vicinity_DENSITY_DMS_prelim_2.png", last_plot(), w
 
 ```
 
-```{r Combined Plots and Final Adjustments}
+```{r Final Aesthetic Adjustments to all plots}
 library(patchwork)
 library(cowplot)
 library(grid)
@@ -1818,12 +1818,12 @@ if (exists("density_main_fig")) {
       oob      = scales::squish,
       name     = "HB–LB\nDensity\nDiff"
     )
-  ggsave("../figures/Vicinity_DENSITY_DIFF.png", density_main_fig, width = 9, height = 6, dpi = 300)
+  ggsave("../../fig_3_antigen_specificity/output/fig_3c_new_density_diff.png", density_main_fig, width = 9, height = 6, dpi = 300)
 }
 
-ggsave("../figures/Vicinity_DENSITY_v2-22.png", v1, width = 8, height = 4.5, dpi = 300)
-ggsave("../figures/FIG_4D_Vicinity_SAMPLE_SIZe_v2.png", s1, width = 8, height = 4.5, dpi = 300)
-ggsave("../figures/FIG_4E_Vicinity_DENSITY_DMS_v2.png", dms1, width = 8, height = 4.5, dpi = 300)
+ggsave("../output/fig_4c_vicinity_density_prelim.png", v1, width = 8, height = 4.5, dpi = 300)
+ggsave("../output/fig_4d_vicinity_sample_size_v2.png", s1, width = 8, height = 4.5, dpi = 300)
+ggsave("../output/fig_4e_vicinity_density_dms_v2.png", dms1, width = 8, height = 4.5, dpi = 300)
 
 if (exists("p_ag_spec")) {
   p_ag_spec <- p_ag_spec + theme(
@@ -1837,7 +1837,7 @@ if (exists("p_ag_spec")) {
     strip.text = element_text(size = facet_text),
     text = element_text(family = "DejaVu Sans")
   )
-  ggsave("../figures/FIG_3B_Ag_density.png", p_ag_spec, width = 16, height = 4.5, dpi = 301)
+  ggsave("../../fig_3_antigen_specificity/output/fig_3b_ag_density.png", p_ag_spec, width = 16, height = 4.5, dpi = 301)
 }
 
 if (exists("suppl_DENS")) {
@@ -1852,7 +1852,7 @@ if (exists("suppl_DENS")) {
     strip.text = element_text(size = facet_text),
     text = element_text(family = "DejaVu Sans")
   )
-  ggsave("../figures/FIG_S7_Supplementary_DENSITY_TSNE.png", suppl_DENS, width = 12, height = 4.5, dpi = 600)
+  ggsave("../../supplementary/fig_s7/output/fig_s7_supplementary_density_tsne.png", suppl_DENS, width = 12, height = 4.5, dpi = 600)
 }
 ```
 

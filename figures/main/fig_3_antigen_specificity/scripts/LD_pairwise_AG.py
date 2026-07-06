@@ -366,7 +366,7 @@ fig.text(0.5, 0.04, "Levenshtein Distance (aa)", ha="center", va="center", fonts
 # add shared y label as "Density
 plt.tight_layout()
 plt.savefig(
-    "../figures/FIG_S6_pairwise_levenshtein_distance_distributions_LEV_NORM2-3.png",
+    "../../supplementary/fig_s6/output/fig_s6_pairwise_levenshtein_distance_distributions_lev_norm2-3.png",
     bbox_inches="tight",
 )
 plt.clf()

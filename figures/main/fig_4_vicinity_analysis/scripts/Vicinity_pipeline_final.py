@@ -26,17 +26,12 @@ import sys
 import os
 from scipy.sparse import save_npz
 
-sys.path.insert(0, "/doctorai/niccoloc/airr_atlas/quantitative_mapping_github/scripts")
-from figures.main.fig_3_antigen_specificity.scripts.Vicinity_analysis_class_final import (
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+from Vicinity_analysis_class_final import (
     Vicinity_analysis,
-)
-from figures.main.fig_3_antigen_specificity.scripts.Vicinity_analysis_class_final import (
     prepare_data_for_plotting,
-)
-from figures.main.fig_3_antigen_specificity.scripts.Vicinity_analysis_class_final import (
     prepare_data_for_plotting_LD_MAT,
-)
-from figures.main.fig_3_antigen_specificity.scripts.Vicinity_analysis_class_final import (
     run_ggplot_vicinity,
 )
 

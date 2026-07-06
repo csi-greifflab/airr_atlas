@@ -493,7 +493,7 @@ for i in range(r):
             texts[k].set_fontweight("bold")
         k += 1
 
-out_path = f"../figures/FIG_3A_w2_distance_matrix_{EMB_TYPE}-4.png"
+out_path = f"../output/fig_3a_w2_distance_matrix_{EMB_TYPE}-4.png"
 plt.savefig(out_path, dpi=300)
 plt.clf()
 print(f"Saved figure to {out_path}")

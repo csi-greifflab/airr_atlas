@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================
-# EMBEDDAIR - Batch Embedding Extraction Script
+# PEPE - Batch Embedding Extraction Script
 # ============================================================================
 # This script runs pepe to extract embeddings from various antibody datasets
 # using ESM2 and AntiBERTa2 models across all layers.
