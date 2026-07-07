@@ -14,18 +14,16 @@ Many figures share the same analysis pipelines — those pipelines are documente
 
 ### Pipeline 1 — Global repertoire structure (Figure 2, Supplementary S1–S4, S11–S13)
 
-Used for embedding extraction, t-SNE, completeness/W₂ analysis, and related supplementary figures.
+Used for embedding extraction, t-SNE, completeness/W₂ analysis, and related supplementary figures (including S16).
 
 All code lives in `figures/main/fig_2_w2_distance_matrices/`.
 
 | Step | Script | Driver |
 |------|--------|--------|
 | AntiBERTa2 (AB2) embeddings | `scripts/antiberta2_cdr3.py` | `drivers/run_antiberta2_cdr3.bash` |
-| ESM2 embeddings | `scripts/esm2_cdr3.py` | `drivers/run_esm2.bash` |
+| ESM2 embeddings | `scripts/esm2.py` | `drivers/run_esm2.bash` |
 | One-hot (OHE) embeddings | `scripts/OHE_script.py` | `drivers/run_ohe.bash` |
 | t-SNE reduction | `scripts/build_tsne.py` | `drivers/run_tsne.bash` |
-
-> **Note:** `run_esm2.bash` currently calls `esm2.py`, which is not yet in this folder (only `esm2_cdr3.py`). Copy from repo-root `scripts/esm2.py` or update the driver before running.
 
 ---
 
@@ -113,6 +111,8 @@ Dataset batch drivers (Figure 4). All drivers source `driver_env.sh`, which reso
 | **S13** | Residual V(D)J gene bias | **Same notebook as S12** | Same as S12 |
 | **S14** | CR9114 | Pipeline 2 → `PREPROCESSING.rmd` / Vicinity plots | `supplementary/fig_s14/output/fig_s14_cr9114.png` |
 | **S15** | AlphaSeq HB/LB scatter selection | Pipeline 2 → `PREPROCESSING.rmd` | `supplementary/fig_s15/output/fig_s15_alphaseq_scatter_hb_selection.png` |
+| **S16** | SWD separates real vs random repertoires | Pipeline 1 → `supplementary/fig_s16/swd_random_data.ipynb` | `supplementary/fig_s16/swd_heatmap_{ohe,esm2,ab2}_300000.png` |
+| **S17** | W₂ vs SWD comparison | `supplementary/fig_s17/swd_random_data.ipynb` | `supplementary/fig_s17/w2_vs_swd_scatter.png`, `w2_vs_swd_rank_scatter.png` |
 
 ---
 
@@ -127,7 +127,7 @@ figures/
 │   ├── fig_3_antigen_specificity/     Pipeline 2: scripts, notebooks, data, output
 │   └── fig_4_vicinity_analysis/       Fig 4 drivers, notebooks, data, output
 └── supplementary/
-    ├── fig_s3/ … fig_s15/             notebooks/, data/, output/
+    ├── fig_s3/ … fig_s17/             notebooks/, data/, output/
 ```
 
 Figure folders hold **outputs, notebooks, and figure-specific data**. Shared analysis code is grouped under the pipeline folders above (primarily `fig_2_*` and `fig_3_*`), not duplicated per supplementary figure.
@@ -139,17 +139,8 @@ Figure folders hold **outputs, notebooks, and figure-specific data**. Shared ana
 | Location | Contents |
 |----------|----------|
 | `figures/main/fig_2_w2_distance_matrices/data/` | Small CSVs (e.g. `data_for_figure_2c.csv`); full embeddings under repo-root `data/` |
-| `figures/main/fig_3_antigen_specificity/data/` | Sample sequences, metadata; embeddings expected at `data/embeddings/` (not yet bundled) |
-| `figures/main/fig_4_vicinity_analysis/data/` | Vicinity sample sequences, metadata, pre-computed results |
-| Repo-root `data/` | Large files (gitignored) — embeddings, completeness CSVs, full FASTA inputs |
+| `figures/main/fig_3_antigen_specificity/data/` | Sample sequences and metadata; full embeddings under repo-root `data/embeddings/` |
+| `figures/main/fig_4_vicinity_analysis/data/` | Vicinity sample sequences, metadata, and pre-computed results |
+| Repo-root `data/` | Large files (gitignored): embeddings, completeness CSVs, and full FASTA inputs |
 
-Several notebooks still contain `<UPDATE_PATH>` placeholders or legacy absolute paths — see [`TODO.md`](../TODO.md) for the cleanup checklist.
-
----
-
-## Known issues (reproduction blockers)
-
-- Fig 2 drivers use hard-coded `/doctorai/marinafr/` paths
-- `fig_3/data/embeddings/` not bundled; W₂ and t-SNE scripts need these files
-
-Full task list: [`TODO.md`](../TODO.md)
+Obtain or generate embedding files locally and place them under `data/embeddings/` before running Pipeline 2 scripts and Figure 4 drivers.
